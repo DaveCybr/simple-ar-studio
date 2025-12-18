@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, FileVideo, Image, QrCode } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeModal } from "./QRCodeModal";
+
 interface ARContent {
   id: string;
   name: string;
@@ -21,21 +23,28 @@ interface ARContentListProps {
 }
 
 export const ARContentList = ({ onSelect, refresh }: ARContentListProps) => {
+  const { user } = useAuth();
   const [contents, setContents] = useState<ARContent[]>([]);
   const [loading, setLoading] = useState(true);
   const [qrModal, setQrModal] = useState<{ open: boolean; content: ARContent | null }>({
     open: false,
     content: null,
   });
+
   useEffect(() => {
-    fetchContents();
-  }, [refresh]);
+    if (user) {
+      fetchContents();
+    }
+  }, [refresh, user]);
 
   const fetchContents = async () => {
+    if (!user) return;
+    
     setLoading(true);
     const { data, error } = await supabase
       .from('ar_content')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
     if (!error && data) {
