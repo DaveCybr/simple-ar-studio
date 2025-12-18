@@ -134,12 +134,12 @@
           videoPlane.setAttribute('rotation', '0 0 0');
           targetEntity.appendChild(videoPlane);
         } else {
-          // Image plane
+          // Image plane - 16:9 aspect ratio
           const imagePlane = document.createElement('a-image');
           imagePlane.setAttribute('src', '#ar-image');
           imagePlane.setAttribute('position', '0 0 0');
           imagePlane.setAttribute('width', '1');
-          imagePlane.setAttribute('height', '1');
+          imagePlane.setAttribute('height', '0.5625');
           imagePlane.setAttribute('rotation', '0 0 0');
           targetEntity.appendChild(imagePlane);
         }
