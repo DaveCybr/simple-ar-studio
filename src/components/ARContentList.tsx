@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, FileVideo, Image, ExternalLink } from "lucide-react";
+import { Play, FileVideo, Image, QrCode } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-
+import { QRCodeModal } from "./QRCodeModal";
 interface ARContent {
   id: string;
   name: string;
@@ -23,7 +23,10 @@ interface ARContentListProps {
 export const ARContentList = ({ onSelect, refresh }: ARContentListProps) => {
   const [contents, setContents] = useState<ARContent[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [qrModal, setQrModal] = useState<{ open: boolean; content: ARContent | null }>({
+    open: false,
+    content: null,
+  });
   useEffect(() => {
     fetchContents();
   }, [refresh]);
@@ -102,14 +105,23 @@ export const ARContentList = ({ onSelect, refresh }: ARContentListProps) => {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => window.open(content.marker_url, '_blank')}
+                onClick={() => setQrModal({ open: true, content })}
               >
-                <ExternalLink className="w-4 h-4" />
+                <QrCode className="w-4 h-4" />
               </Button>
             </div>
           </CardContent>
         </Card>
       ))}
+
+      {qrModal.content && (
+        <QRCodeModal
+          open={qrModal.open}
+          onOpenChange={(open) => setQrModal({ ...qrModal, open })}
+          projectId={qrModal.content.id}
+          projectName={qrModal.content.name}
+        />
+      )}
     </div>
   );
 };
