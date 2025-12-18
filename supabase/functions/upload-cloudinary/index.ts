@@ -32,22 +32,26 @@ serve(async (req) => {
 
     console.log(`Uploading file: ${file.name}, type: ${file.type}, size: ${file.size}`);
 
-    // Create upload form data for Cloudinary
-    const cloudinaryFormData = new FormData();
-    cloudinaryFormData.append('file', file);
-    cloudinaryFormData.append('upload_preset', 'ml_default');
-    cloudinaryFormData.append('folder', folder);
-
-    // Generate signature for authenticated upload
+    // Generate timestamp
     const timestamp = Math.floor(Date.now() / 1000);
+
+    // Build params to sign (alphabetical order, excluding file, api_key, signature, resource_type)
     const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
     
+    // Generate SHA-1 signature
     const encoder = new TextEncoder();
     const data = encoder.encode(paramsToSign + apiSecret);
     const hashBuffer = await crypto.subtle.digest('SHA-1', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
+    console.log('Params to sign:', paramsToSign);
+    console.log('Generated signature:', signature);
+
+    // Create upload form data for Cloudinary
+    const cloudinaryFormData = new FormData();
+    cloudinaryFormData.append('file', file);
+    cloudinaryFormData.append('folder', folder);
     cloudinaryFormData.append('timestamp', timestamp.toString());
     cloudinaryFormData.append('api_key', apiKey);
     cloudinaryFormData.append('signature', signature);
