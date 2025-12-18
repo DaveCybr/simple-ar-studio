@@ -14,7 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ar_content: {
+        Row: {
+          content_type: string
+          content_url: string
+          created_at: string
+          id: string
+          marker_url: string
+          mind_file_url: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          content_type?: string
+          content_url: string
+          created_at?: string
+          id?: string
+          marker_url: string
+          mind_file_url: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          content_type?: string
+          content_url?: string
+          created_at?: string
+          id?: string
+          marker_url?: string
+          mind_file_url?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
