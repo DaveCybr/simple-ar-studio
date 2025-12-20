@@ -122,22 +122,28 @@ const ViewAR = () => {
   }
 
   // Build URL params for multi-marker
-  const markersParam = encodeURIComponent(JSON.stringify(
-    project.markers.map((m) => ({
-      mind: m.mind_file_url,
-      content: m.content_url,
-      type: m.content_type,
-      scale: m.scale || 1,
-      name: m.name,
-    }))
-  ));
+  const markersParam = encodeURIComponent(
+    JSON.stringify(
+      project.markers.map((m) => ({
+        mind: m.mind_file_url,
+        content: m.content_url,
+        type: m.content_type,
+        scale: m.scale || 1,
+        name: m.name,
+      }))
+    )
+  );
+
+  // FIXED: Use absolute path instead of relative
+  const arViewerUrl = `${window.location.origin}/ar-viewer.html?markers=${markersParam}`;
 
   return (
     <div className="relative w-full h-screen">
       <iframe
-        src={`/ar-viewer.html?markers=${markersParam}`}
+        src={arViewerUrl}
         className="w-full h-full border-0"
         allow="camera; gyroscope; accelerometer; autoplay"
+        title={`AR Viewer - ${project.name}`}
       />
       <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
         <Link to="/">

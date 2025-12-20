@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react"; // Ganti dari react-swc ke react biasa
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
@@ -9,19 +9,22 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  plugins: [
-    react(), // Plugin react biasa, lebih stabil untuk production
-    mode === "development" && componentTagger(),
-  ].filter(Boolean),
+  plugins: [react(), mode === "development" && componentTagger()].filter(
+    Boolean
+  ),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // PENTING: Pastikan public files ter-copy
+  publicDir: "public",
   build: {
     // Optimasi untuk production
     minify: "terser",
     sourcemap: false,
+    // Pastikan ar-viewer.html dan ar.html di-copy ke dist
+    copyPublicDir: true,
     rollupOptions: {
       output: {
         manualChunks: {
