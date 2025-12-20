@@ -7,7 +7,10 @@ cmds = [
 ]
 
 [phases.build]
-cmds = ["npm run build"]
+# Pass environment variables to build
+cmds = [
+  "VITE_SUPABASE_URL=$VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID npm run build"
+]
 
 [start]
 cmd = "npm run preview -- --host 0.0.0.0 --port $PORT"
