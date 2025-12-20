@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle, Home } from "lucide-react";
 
-interface ARContent {
+interface ARMarker {
   id: string;
   name: string;
   marker_url: string;
@@ -14,37 +14,78 @@ interface ARContent {
   scale: number;
 }
 
+interface ARProject {
+  id: string;
+  name: string;
+  markers: ARMarker[];
+}
+
 const ViewAR = () => {
   const { id } = useParams<{ id: string }>();
-  const [content, setContent] = useState<ARContent | null>(null);
+  const [project, setProject] = useState<ARProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchContent = async () => {
+    const fetchProject = async () => {
       if (!id) {
         setError("ID tidak valid");
         setLoading(false);
         return;
       }
 
-      const { data, error: fetchError } = await supabase
+      // First try to fetch as a project
+      const { data: projectData, error: projectError } = await supabase
+        .from("ar_projects")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (projectData) {
+        // Fetch all markers for this project
+        const { data: markersData, error: markersError } = await supabase
+          .from("ar_content")
+          .select("*")
+          .eq("project_id", id);
+
+        if (markersError || !markersData || markersData.length === 0) {
+          setError("Tidak ada marker dalam project ini");
+          setLoading(false);
+          return;
+        }
+
+        setProject({
+          id: projectData.id,
+          name: projectData.name,
+          markers: markersData,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Fallback: try to fetch as single ar_content (backward compatibility)
+      const { data: contentData, error: contentError } = await supabase
         .from("ar_content")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
-      if (fetchError || !data) {
+      if (contentError || !contentData) {
         setError("Konten AR tidak ditemukan");
         setLoading(false);
         return;
       }
 
-      setContent(data);
+      // Single marker fallback
+      setProject({
+        id: contentData.id,
+        name: contentData.name,
+        markers: [contentData],
+      });
       setLoading(false);
     };
 
-    fetchContent();
+    fetchProject();
   }, [id]);
 
   if (loading) {
@@ -58,7 +99,7 @@ const ViewAR = () => {
     );
   }
 
-  if (error || !content) {
+  if (error || !project) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4 max-w-md">
@@ -80,10 +121,21 @@ const ViewAR = () => {
     );
   }
 
+  // Build URL params for multi-marker
+  const markersParam = encodeURIComponent(JSON.stringify(
+    project.markers.map((m) => ({
+      mind: m.mind_file_url,
+      content: m.content_url,
+      type: m.content_type,
+      scale: m.scale || 1,
+      name: m.name,
+    }))
+  ));
+
   return (
     <div className="relative w-full h-screen">
       <iframe
-        src={`/ar-viewer.html?mind=${encodeURIComponent(content.mind_file_url)}&content=${encodeURIComponent(content.content_url)}&type=${content.content_type}&scale=${content.scale || 1}`}
+        src={`/ar-viewer.html?markers=${markersParam}`}
         className="w-full h-full border-0"
         allow="camera; gyroscope; accelerometer; autoplay"
       />
@@ -95,7 +147,7 @@ const ViewAR = () => {
           </Button>
         </Link>
         <div className="bg-background/80 backdrop-blur px-3 py-1.5 rounded-full text-sm font-medium">
-          {content.name}
+          {project.name} ({project.markers.length} marker)
         </div>
       </div>
     </div>
