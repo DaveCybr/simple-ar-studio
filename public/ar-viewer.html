@@ -82,110 +82,148 @@
       if (!mindUrl || !contentUrl) {
         document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Error: Missing parameters</p>';
       } else {
-        // Create A-Frame scene dynamically
-        const scene = document.createElement('a-scene');
-        scene.setAttribute('mindar-image', `imageTargetSrc: ${mindUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;`);
-        scene.setAttribute('color-space', 'sRGB');
-        scene.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
-        scene.setAttribute('vr-mode-ui', 'enabled: false');
-        scene.setAttribute('device-orientation-permission-ui', 'enabled: false');
+        // Function to create AR scene with correct dimensions
+        function createARScene(contentWidth, contentHeight) {
+          // Calculate aspect ratio from actual media dimensions
+          const aspectRatio = contentWidth / contentHeight;
+          
+          // Base width is 1, calculate height based on actual aspect ratio
+          const baseWidth = 1 * scale;
+          const baseHeight = (1 / aspectRatio) * scale;
 
-        // Assets
-        const assets = document.createElement('a-assets');
-        
-        if (contentType === 'video') {
-          const video = document.createElement('video');
-          video.id = 'ar-video';
-          video.src = contentUrl;
-          video.setAttribute('preload', 'auto');
-          video.setAttribute('loop', 'true');
-          video.setAttribute('playsinline', '');
-          video.setAttribute('webkit-playsinline', '');
-          video.setAttribute('crossorigin', 'anonymous');
-          video.muted = true;
-          assets.appendChild(video);
-        } else {
-          const img = document.createElement('img');
-          img.id = 'ar-image';
-          img.src = contentUrl;
-          img.setAttribute('crossorigin', 'anonymous');
-          assets.appendChild(img);
-        }
-        
-        scene.appendChild(assets);
+          // Create A-Frame scene dynamically
+          const scene = document.createElement('a-scene');
+          scene.setAttribute('mindar-image', `imageTargetSrc: ${mindUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;`);
+          scene.setAttribute('color-space', 'sRGB');
+          scene.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
+          scene.setAttribute('vr-mode-ui', 'enabled: false');
+          scene.setAttribute('device-orientation-permission-ui', 'enabled: false');
 
-        // Camera
-        const camera = document.createElement('a-camera');
-        camera.setAttribute('position', '0 0 0');
-        camera.setAttribute('look-controls', 'enabled: false');
-        scene.appendChild(camera);
-
-        // Target entity
-        const targetEntity = document.createElement('a-entity');
-        targetEntity.setAttribute('mindar-image-target', 'targetIndex: 0');
-        targetEntity.id = 'target';
-
-        // Calculate scaled dimensions
-        const baseWidth = 1 * scale;
-        const baseHeight = 0.5625 * scale; // 16:9 aspect ratio
-
-        if (contentType === 'video') {
-          // Video plane
-          const videoPlane = document.createElement('a-video');
-          videoPlane.setAttribute('src', '#ar-video');
-          videoPlane.setAttribute('position', '0 0 0');
-          videoPlane.setAttribute('width', baseWidth.toString());
-          videoPlane.setAttribute('height', baseHeight.toString());
-          videoPlane.setAttribute('rotation', '0 0 0');
-          targetEntity.appendChild(videoPlane);
-        } else {
-          // Image plane - 16:9 aspect ratio
-          const imagePlane = document.createElement('a-image');
-          imagePlane.setAttribute('src', '#ar-image');
-          imagePlane.setAttribute('position', '0 0 0');
-          imagePlane.setAttribute('width', baseWidth.toString());
-          imagePlane.setAttribute('height', baseHeight.toString());
-          imagePlane.setAttribute('rotation', '0 0 0');
-          targetEntity.appendChild(imagePlane);
-        }
-
-        scene.appendChild(targetEntity);
-        document.body.appendChild(scene);
-
-        // Event listeners
-        scene.addEventListener('arReady', () => {
-          document.getElementById('loading').classList.add('hidden');
-        });
-
-        scene.addEventListener('arError', () => {
-          document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Error: Tidak dapat mengakses kamera</p>';
-        });
-
-        // Target found/lost events
-        targetEntity.addEventListener('targetFound', () => {
-          document.getElementById('hint').textContent = '✅ Marker terdeteksi!';
-          document.getElementById('hint').style.background = 'rgba(34, 197, 94, 0.9)';
+          // Assets
+          const assets = document.createElement('a-assets');
           
           if (contentType === 'video') {
-            const video = document.getElementById('ar-video');
-            if (video) {
-              video.muted = false;
-              video.play().catch(e => console.log('Autoplay prevented:', e));
-            }
+            const video = document.createElement('video');
+            video.id = 'ar-video';
+            video.src = contentUrl;
+            video.setAttribute('preload', 'auto');
+            video.setAttribute('loop', 'true');
+            video.setAttribute('playsinline', '');
+            video.setAttribute('webkit-playsinline', '');
+            video.setAttribute('crossorigin', 'anonymous');
+            video.muted = true;
+            assets.appendChild(video);
+          } else {
+            const img = document.createElement('img');
+            img.id = 'ar-image';
+            img.src = contentUrl;
+            img.setAttribute('crossorigin', 'anonymous');
+            assets.appendChild(img);
           }
-        });
-
-        targetEntity.addEventListener('targetLost', () => {
-          document.getElementById('hint').textContent = '📱 Arahkan kamera ke marker';
-          document.getElementById('hint').style.background = 'rgba(0,0,0,0.7)';
           
+          scene.appendChild(assets);
+
+          // Camera
+          const camera = document.createElement('a-camera');
+          camera.setAttribute('position', '0 0 0');
+          camera.setAttribute('look-controls', 'enabled: false');
+          scene.appendChild(camera);
+
+          // Target entity
+          const targetEntity = document.createElement('a-entity');
+          targetEntity.setAttribute('mindar-image-target', 'targetIndex: 0');
+          targetEntity.id = 'target';
+
           if (contentType === 'video') {
-            const video = document.getElementById('ar-video');
-            if (video) {
-              video.pause();
-            }
+            // Video plane with correct aspect ratio
+            const videoPlane = document.createElement('a-video');
+            videoPlane.setAttribute('src', '#ar-video');
+            videoPlane.setAttribute('position', '0 0 0');
+            videoPlane.setAttribute('width', baseWidth.toString());
+            videoPlane.setAttribute('height', baseHeight.toString());
+            videoPlane.setAttribute('rotation', '0 0 0');
+            targetEntity.appendChild(videoPlane);
+          } else {
+            // Image plane with correct aspect ratio
+            const imagePlane = document.createElement('a-image');
+            imagePlane.setAttribute('src', '#ar-image');
+            imagePlane.setAttribute('position', '0 0 0');
+            imagePlane.setAttribute('width', baseWidth.toString());
+            imagePlane.setAttribute('height', baseHeight.toString());
+            imagePlane.setAttribute('rotation', '0 0 0');
+            targetEntity.appendChild(imagePlane);
           }
-        });
+
+          scene.appendChild(targetEntity);
+          document.body.appendChild(scene);
+
+          // Event listeners
+          scene.addEventListener('arReady', () => {
+            document.getElementById('loading').classList.add('hidden');
+          });
+
+          scene.addEventListener('arError', () => {
+            document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Error: Tidak dapat mengakses kamera</p>';
+          });
+
+          // Target found/lost events
+          targetEntity.addEventListener('targetFound', () => {
+            document.getElementById('hint').textContent = '✅ Marker terdeteksi!';
+            document.getElementById('hint').style.background = 'rgba(34, 197, 94, 0.9)';
+            
+            if (contentType === 'video') {
+              const video = document.getElementById('ar-video');
+              if (video) {
+                video.muted = false;
+                video.play().catch(e => console.log('Autoplay prevented:', e));
+              }
+            }
+          });
+
+          targetEntity.addEventListener('targetLost', () => {
+            document.getElementById('hint').textContent = '📱 Arahkan kamera ke marker';
+            document.getElementById('hint').style.background = 'rgba(0,0,0,0.7)';
+            
+            if (contentType === 'video') {
+              const video = document.getElementById('ar-video');
+              if (video) {
+                video.pause();
+              }
+            }
+          });
+        }
+
+        // Detect media dimensions before creating AR scene
+        if (contentType === 'video') {
+          const tempVideo = document.createElement('video');
+          tempVideo.src = contentUrl;
+          tempVideo.setAttribute('crossorigin', 'anonymous');
+          tempVideo.addEventListener('loadedmetadata', () => {
+            const width = tempVideo.videoWidth;
+            const height = tempVideo.videoHeight;
+            console.log('Video dimensions:', width, 'x', height);
+            createARScene(width, height);
+          });
+          tempVideo.addEventListener('error', () => {
+            console.log('Video load error, using default 16:9');
+            createARScene(16, 9); // Fallback to 16:9
+          });
+          tempVideo.load();
+        } else {
+          const tempImg = new Image();
+          tempImg.crossOrigin = 'anonymous';
+          tempImg.onload = () => {
+            const width = tempImg.naturalWidth;
+            const height = tempImg.naturalHeight;
+            console.log('Image dimensions:', width, 'x', height);
+            createARScene(width, height);
+          };
+          tempImg.onerror = () => {
+            console.log('Image load error, using default 16:9');
+            createARScene(16, 9); // Fallback to 16:9
+          };
+          tempImg.src = contentUrl;
+        }
       }
     </script>
   </body>
