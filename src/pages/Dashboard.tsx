@@ -7,28 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ARUploadForm } from "@/components/ARUploadForm";
-import { ARContentList } from "@/components/ARContentList";
+import { ARProjectForm } from "@/components/ARProjectForm";
+import { ARProjectList } from "@/components/ARProjectList";
 import { 
   Scan, 
   Upload, 
-  List, 
-  ArrowLeft, 
+  Layers, 
   LogOut, 
   User,
   Crown,
   Loader2
 } from "lucide-react";
-
-interface ARContent {
-  id: string;
-  name: string;
-  marker_url: string;
-  mind_file_url: string;
-  content_url: string;
-  content_type: string;
-  created_at: string;
-}
 
 interface Profile {
   id: string;
@@ -42,8 +31,6 @@ interface Profile {
 const Dashboard = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const [selectedContent, setSelectedContent] = useState<ARContent | null>(null);
-  const [showAR, setShowAR] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -75,9 +62,8 @@ const Dashboard = () => {
     }
   }, [user]);
 
-  const handleSelectContent = (content: ARContent) => {
-    setSelectedContent(content);
-    setShowAR(true);
+  const handleSelectProject = (projectId: string) => {
+    navigate(`/view/${projectId}`);
   };
 
   const handleUploadSuccess = async () => {
@@ -109,37 +95,21 @@ const Dashboard = () => {
     );
   }
 
-  if (showAR && selectedContent) {
-    return (
-      <div className="relative w-full h-screen">
-        <iframe
-          src={`/ar-viewer.html?mind=${encodeURIComponent(selectedContent.mind_file_url)}&content=${encodeURIComponent(selectedContent.content_url)}&type=${selectedContent.content_type}`}
-          className="w-full h-full border-0"
-          allow="camera; gyroscope; accelerometer; autoplay"
-        />
-        <Button
-          onClick={() => setShowAR(false)}
-          className="absolute top-4 left-4 z-10"
-          variant="secondary"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Kembali
-        </Button>
-        <div className="absolute top-4 right-4 z-10 bg-background/80 backdrop-blur px-3 py-1.5 rounded-full text-sm font-medium">
-          {selectedContent.name}
-        </div>
-      </div>
-    );
-  }
-
   const tierLabels = {
     free: 'Free',
     pro: 'Pro',
     enterprise: 'Enterprise'
   };
 
+  const tierMarkerLimits = {
+    free: 3,
+    pro: 5,
+    enterprise: 5,
+  };
+
   const canUpload = profile ? profile.uploads_used < profile.upload_quota || profile.subscription_tier === 'enterprise' : false;
   const uploadProgress = profile ? (profile.uploads_used / profile.upload_quota) * 100 : 0;
+  const maxMarkers = tierMarkerLimits[profile?.subscription_tier || 'free'];
 
   return (
     <div className="min-h-screen bg-background">
@@ -177,12 +147,15 @@ const Dashboard = () => {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">Kuota Upload</CardTitle>
+                <CardTitle className="text-lg">Kuota Project</CardTitle>
                 <CardDescription>
                   {profile?.subscription_tier === 'enterprise' 
-                    ? 'Unlimited upload' 
-                    : `${profile?.uploads_used || 0} dari ${profile?.upload_quota || 3} upload digunakan`
+                    ? 'Unlimited project' 
+                    : `${profile?.uploads_used || 0} dari ${profile?.upload_quota || 3} project digunakan`
                   }
+                  <span className="ml-2 text-xs">
+                    (Maks {maxMarkers} marker per project)
+                  </span>
                 </CardDescription>
               </div>
               {profile?.subscription_tier !== 'enterprise' && (
@@ -203,22 +176,22 @@ const Dashboard = () => {
         <Tabs defaultValue="list" className="w-full">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
             <TabsTrigger value="list" className="flex items-center gap-2">
-              <List className="w-4 h-4" />
-              AR Content
+              <Layers className="w-4 h-4" />
+              Project AR
             </TabsTrigger>
             <TabsTrigger value="upload" className="flex items-center gap-2" disabled={!canUpload}>
               <Upload className="w-4 h-4" />
-              Upload Baru
+              Buat Project
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="list">
-            <ARContentList onSelect={handleSelectContent} refresh={refreshKey} />
+            <ARProjectList onSelectProject={handleSelectProject} refresh={refreshKey} />
           </TabsContent>
 
           <TabsContent value="upload" className="flex justify-center">
             {canUpload ? (
-              <ARUploadForm onSuccess={handleUploadSuccess} />
+              <ARProjectForm onSuccess={handleUploadSuccess} maxMarkers={maxMarkers} />
             ) : (
               <Card className="max-w-md">
                 <CardContent className="p-8 text-center">
@@ -227,7 +200,7 @@ const Dashboard = () => {
                   </div>
                   <h3 className="font-semibold text-lg mb-2">Kuota Habis</h3>
                   <p className="text-muted-foreground mb-4">
-                    Anda telah menggunakan semua kuota upload bulan ini.
+                    Anda telah menggunakan semua kuota project bulan ini.
                   </p>
                   <Button onClick={() => navigate('/pricing')}>
                     Upgrade Sekarang

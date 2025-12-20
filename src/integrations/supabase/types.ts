@@ -23,6 +23,7 @@ export type Database = {
           marker_url: string
           mind_file_url: string
           name: string
+          project_id: string | null
           scale: number
           updated_at: string
           user_id: string | null
@@ -35,6 +36,7 @@ export type Database = {
           marker_url: string
           mind_file_url: string
           name: string
+          project_id?: string | null
           scale?: number
           updated_at?: string
           user_id?: string | null
@@ -47,11 +49,19 @@ export type Database = {
           marker_url?: string
           mind_file_url?: string
           name?: string
+          project_id?: string | null
           scale?: number
           updated_at?: string
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ar_content_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "ar_projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ar_content_user_id_fkey"
             columns: ["user_id"]
@@ -60,6 +70,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ar_projects: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
