@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
 import { Upload, Loader2, CheckCircle, FileVideo, Image } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +20,7 @@ export const ARUploadForm = ({ onSuccess }: ARUploadFormProps) => {
   const [mindFile, setMindFile] = useState<File | null>(null);
   const [contentFile, setContentFile] = useState<File | null>(null);
   const [contentType, setContentType] = useState<"video" | "image">("video");
+  const [scale, setScale] = useState(1.0);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const { toast } = useToast();
@@ -76,6 +78,7 @@ export const ARUploadForm = ({ onSuccess }: ARUploadFormProps) => {
         content_url: contentUrl,
         content_type: contentType,
         user_id: user?.id,
+        scale: scale,
       });
 
       if (dbError) throw dbError;
@@ -90,6 +93,7 @@ export const ARUploadForm = ({ onSuccess }: ARUploadFormProps) => {
       setMarkerFile(null);
       setMindFile(null);
       setContentFile(null);
+      setScale(1.0);
       onSuccess?.();
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -208,6 +212,25 @@ export const ARUploadForm = ({ onSuccess }: ARUploadFormProps) => {
               />
               {contentFile && <CheckCircle className="w-5 h-5 text-green-500" />}
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Ukuran AR Content</Label>
+              <span className="text-sm font-medium text-primary">{scale.toFixed(1)}x</span>
+            </div>
+            <Slider
+              value={[scale]}
+              onValueChange={(value) => setScale(value[0])}
+              min={0.5}
+              max={3}
+              step={0.1}
+              disabled={uploading}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Atur seberapa besar konten AR muncul (0.5x - 3x)
+            </p>
           </div>
 
           <Button type="submit" className="w-full" disabled={uploading}>

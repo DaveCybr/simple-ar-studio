@@ -23,6 +23,7 @@ export type Database = {
           marker_url: string
           mind_file_url: string
           name: string
+          scale: number
           updated_at: string
           user_id: string | null
         }
@@ -34,6 +35,7 @@ export type Database = {
           marker_url: string
           mind_file_url: string
           name: string
+          scale?: number
           updated_at?: string
           user_id?: string | null
         }
@@ -45,6 +47,7 @@ export type Database = {
           marker_url?: string
           mind_file_url?: string
           name?: string
+          scale?: number
           updated_at?: string
           user_id?: string | null
         }

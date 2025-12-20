@@ -77,6 +77,7 @@
       const mindUrl = params.get('mind');
       const contentUrl = params.get('content');
       const contentType = params.get('type') || 'video';
+      const scale = parseFloat(params.get('scale') || '1');
 
       if (!mindUrl || !contentUrl) {
         document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Error: Missing parameters</p>';
@@ -124,13 +125,17 @@
         targetEntity.setAttribute('mindar-image-target', 'targetIndex: 0');
         targetEntity.id = 'target';
 
+        // Calculate scaled dimensions
+        const baseWidth = 1 * scale;
+        const baseHeight = 0.5625 * scale; // 16:9 aspect ratio
+
         if (contentType === 'video') {
           // Video plane
           const videoPlane = document.createElement('a-video');
           videoPlane.setAttribute('src', '#ar-video');
           videoPlane.setAttribute('position', '0 0 0');
-          videoPlane.setAttribute('width', '1');
-          videoPlane.setAttribute('height', '0.5625'); // 16:9 aspect ratio
+          videoPlane.setAttribute('width', baseWidth.toString());
+          videoPlane.setAttribute('height', baseHeight.toString());
           videoPlane.setAttribute('rotation', '0 0 0');
           targetEntity.appendChild(videoPlane);
         } else {
@@ -138,8 +143,8 @@
           const imagePlane = document.createElement('a-image');
           imagePlane.setAttribute('src', '#ar-image');
           imagePlane.setAttribute('position', '0 0 0');
-          imagePlane.setAttribute('width', '1');
-          imagePlane.setAttribute('height', '0.5625');
+          imagePlane.setAttribute('width', baseWidth.toString());
+          imagePlane.setAttribute('height', baseHeight.toString());
           imagePlane.setAttribute('rotation', '0 0 0');
           targetEntity.appendChild(imagePlane);
         }
