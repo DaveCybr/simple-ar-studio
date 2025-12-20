@@ -11,6 +11,7 @@ interface ARContent {
   mind_file_url: string;
   content_url: string;
   content_type: string;
+  scale: number;
 }
 
 const ViewAR = () => {
@@ -82,7 +83,7 @@ const ViewAR = () => {
   return (
     <div className="relative w-full h-screen">
       <iframe
-        src={`/ar-viewer.html?mind=${encodeURIComponent(content.mind_file_url)}&content=${encodeURIComponent(content.content_url)}&type=${content.content_type}`}
+        src={`/ar-viewer.html?mind=${encodeURIComponent(content.mind_file_url)}&content=${encodeURIComponent(content.content_url)}&type=${content.content_type}&scale=${content.scale || 1}`}
         className="w-full h-full border-0"
         allow="camera; gyroscope; accelerometer; autoplay"
       />
