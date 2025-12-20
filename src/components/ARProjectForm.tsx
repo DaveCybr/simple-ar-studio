@@ -248,20 +248,39 @@ export const ARProjectForm = ({
           />
         </div>
 
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
+        <Alert className="border-primary/20 bg-primary/5">
+          <AlertCircle className="h-4 w-4 text-primary" />
           <AlertDescription>
-            <div className="space-y-2">
-              <p className="font-semibold">
+            <div className="space-y-3">
+              <p className="font-semibold text-foreground">
                 Cara Membuat File .mind Multi-Target:
               </p>
-              <ol className="list-decimal list-inside text-sm space-y-1">
-                <li>Buka MindAR Compiler</li>
-                <li>Upload SEMUA marker images sekaligus</li>
-                <li>Klik Start untuk compile</li>
-                <li>Download file .mind yang dihasilkan</li>
-                <li>Upload file tersebut di bawah ini</li>
+              <ol className="list-decimal list-inside text-sm space-y-1.5 text-muted-foreground">
+                <li>Buka MindAR Compiler di link bawah</li>
+                <li>
+                  Upload <strong>SEMUA</strong> marker images sekaligus
+                </li>
+                <li>
+                  Klik <strong>Start</strong> untuk compile
+                </li>
+                <li>
+                  Download file{" "}
+                  <code className="px-1.5 py-0.5 bg-muted rounded text-xs">
+                    .mind
+                  </code>{" "}
+                  yang dihasilkan
+                </li>
+                <li>Upload file tersebut di form ini</li>
               </ol>
+              <a
+                href="https://hiukim.github.io/mind-ar-js-doc/tools/compile/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors mt-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Buka MindAR Compiler
+              </a>
             </div>
           </AlertDescription>
         </Alert>
@@ -282,6 +301,9 @@ export const ARProjectForm = ({
               <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Upload file .mind yang sudah dikompilasi dari MindAR Compiler
+          </p>
         </div>
 
         <div className="space-y-4">
@@ -348,10 +370,14 @@ export const ARProjectForm = ({
                         <CheckCircle className="w-5 h-5 text-green-500" />
                       )}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Gambar yang sama dengan yang di-compile di MindAR
+                    </p>
                   </div>
 
                   <div className="flex gap-4">
                     <Button
+                      type="button"
                       variant={
                         marker.contentType === "video" ? "default" : "outline"
                       }
@@ -365,6 +391,7 @@ export const ARProjectForm = ({
                       Video
                     </Button>
                     <Button
+                      type="button"
                       variant={
                         marker.contentType === "image" ? "default" : "outline"
                       }
