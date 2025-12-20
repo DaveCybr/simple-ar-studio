@@ -21,29 +21,23 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
 
-# Build the application with environment variables baked in
+# Build the application
 RUN npm run build
 
-# Verify ar-viewer.html exists after build
-RUN ls -la /app/dist/ && echo "Checking for ar-viewer.html:" && ls -la /app/dist/ar-viewer.html || echo "WARNING: ar-viewer.html not found!"
+# Verify files exist
+RUN ls -la /app/dist/ && ls -la /app/dist/ar-viewer.html
 
-# Production stage
-FROM node:20-slim
+# Production stage with nginx
+FROM nginx:alpine
 
-WORKDIR /app
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Install serve globally
-RUN npm install -g serve
+# Copy built files
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-
-# Expose port (Railway will set PORT env var)
+# Expose port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:8080', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
-# Start the server with proper SPA routing
-CMD ["serve", "dist", "-l", "8080", "--no-clipboard"]
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
