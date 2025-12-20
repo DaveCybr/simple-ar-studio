@@ -6,7 +6,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install ALL dependencies including optional ones
+# SOLUSI: Paksa install platform-specific dependency yang hilang
+# Ini mengatasi bug npm terkait optional dependencies di Docker
+RUN npm install @rollup/rollup-linux-x64-gnu
 RUN npm install
 
 # Copy source code
@@ -20,16 +22,14 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install vite for preview server
-RUN npm install -g vite
+# Gunakan 'serve' atau 'http-server' sebagai alternatif yang lebih ringan dari vite full
+RUN npm install -g serve
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/vite.config.ts ./vite.config.ts
-COPY --from=builder /app/package.json ./package.json
 
 # Expose port
 EXPOSE 8080
 
-# Start the preview server
-CMD vite preview --host 0.0.0.0 --port ${PORT:-8080}
+# Jalankan server statis (lebih stabil untuk produksi dibanding 'vite preview')
+CMD ["serve", "-s", "dist", "-l", "8080"]
