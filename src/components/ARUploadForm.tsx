@@ -3,15 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, Loader2, CheckCircle, FileVideo, Image, Box } from "lucide-react";
+import { Upload, Loader2, CheckCircle, FileVideo, Image } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ARUploadFormProps {
   onSuccess?: () => void;
 }
 
 export const ARUploadForm = ({ onSuccess }: ARUploadFormProps) => {
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [markerFile, setMarkerFile] = useState<File | null>(null);
   const [mindFile, setMindFile] = useState<File | null>(null);
@@ -73,6 +75,7 @@ export const ARUploadForm = ({ onSuccess }: ARUploadFormProps) => {
         mind_file_url: mindUrl,
         content_url: contentUrl,
         content_type: contentType,
+        user_id: user?.id,
       });
 
       if (dbError) throw dbError;
