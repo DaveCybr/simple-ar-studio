@@ -24,6 +24,9 @@ ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
 # Build the application with environment variables baked in
 RUN npm run build
 
+# Verify ar-viewer.html exists after build
+RUN ls -la /app/dist/ && echo "Checking for ar-viewer.html:" && ls -la /app/dist/ar-viewer.html || echo "WARNING: ar-viewer.html not found!"
+
 # Production stage
 FROM node:20-slim
 
@@ -42,5 +45,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:8080', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-# Start the server
+# Start the server with proper SPA routing
 CMD ["serve", "-s", "dist", "-l", "8080"]

@@ -134,8 +134,8 @@ const ViewAR = () => {
     )
   );
 
-  // FIXED: Use absolute path instead of relative
-  const arViewerUrl = `${window.location.origin}/ar-viewer.html?markers=${markersParam}`;
+  // Use absolute path to public file (not through React Router)
+  const arViewerUrl = `/ar-viewer.html?markers=${markersParam}`;
 
   return (
     <div className="relative w-full h-screen">

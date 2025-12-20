@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => ({
     // Optimasi untuk production
     minify: "terser",
     sourcemap: false,
-    // Pastikan ar-viewer.html dan ar.html di-copy ke dist
+    // Pastikan ar-viewer.html dan ar.html di-copy ke dist root
     copyPublicDir: true,
     rollupOptions: {
       output: {
