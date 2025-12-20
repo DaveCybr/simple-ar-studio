@@ -25,11 +25,17 @@ interface ARProjectListProps {
   refresh?: number;
 }
 
-export const ARProjectList = ({ onSelectProject, refresh }: ARProjectListProps) => {
+export const ARProjectList = ({
+  onSelectProject,
+  refresh,
+}: ARProjectListProps) => {
   const { user } = useAuth();
   const [projects, setProjects] = useState<ARProject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [qrModal, setQrModal] = useState<{ open: boolean; project: ARProject | null }>({
+  const [qrModal, setQrModal] = useState<{
+    open: boolean;
+    project: ARProject | null;
+  }>({
     open: false,
     project: null,
   });
@@ -44,7 +50,7 @@ export const ARProjectList = ({ onSelectProject, refresh }: ARProjectListProps) 
     if (!user) return;
 
     setLoading(true);
-    
+
     // Fetch projects with their markers
     const { data: projectsData, error: projectsError } = await supabase
       .from("ar_projects")
@@ -59,7 +65,7 @@ export const ARProjectList = ({ onSelectProject, refresh }: ARProjectListProps) 
 
     // Fetch markers for each project
     const projectsWithMarkers: ARProject[] = [];
-    
+
     for (const project of projectsData) {
       const { data: markersData } = await supabase
         .from("ar_content")
@@ -100,7 +106,9 @@ export const ARProjectList = ({ onSelectProject, refresh }: ARProjectListProps) 
       <Card className="text-center py-12">
         <CardContent>
           <Layers className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Belum ada project AR. Buat sekarang!</p>
+          <p className="text-muted-foreground">
+            Belum ada project AR. Buat sekarang!
+          </p>
         </CardContent>
       </Card>
     );
@@ -109,22 +117,31 @@ export const ARProjectList = ({ onSelectProject, refresh }: ARProjectListProps) 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {projects.map((project) => (
-        <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+        <Card
+          key={project.id}
+          className="overflow-hidden hover:shadow-lg transition-shadow"
+        >
           {/* Preview grid of markers */}
-          <div className="relative aspect-video bg-muted">
+          <div className="relative aspect-video bg-muted overflow-hidden">
             {project.markers.length > 0 ? (
-              <div 
-                className={`grid h-full ${
-                  project.markers.length === 1 ? 'grid-cols-1' : 
-                  project.markers.length === 2 ? 'grid-cols-2' : 
-                  project.markers.length === 3 ? 'grid-cols-2' : 'grid-cols-2'
+              <div
+                className={`grid h-full w-full ${
+                  project.markers.length === 1
+                    ? "grid-cols-1"
+                    : project.markers.length === 2
+                    ? "grid-cols-2"
+                    : project.markers.length === 3
+                    ? "grid-cols-2"
+                    : "grid-cols-2"
                 } gap-0.5`}
               >
                 {project.markers.slice(0, 4).map((marker, idx) => (
-                  <div 
-                    key={marker.id} 
-                    className={`relative ${
-                      project.markers.length === 3 && idx === 2 ? 'col-span-2' : ''
+                  <div
+                    key={marker.id}
+                    className={`relative overflow-hidden ${
+                      project.markers.length === 3 && idx === 2
+                        ? "col-span-2"
+                        : ""
                     }`}
                   >
                     <img
@@ -145,7 +162,7 @@ export const ARProjectList = ({ onSelectProject, refresh }: ARProjectListProps) 
               {project.marker_count} Marker
             </Badge>
           </div>
-          
+
           <CardContent className="p-4">
             <h3 className="font-semibold mb-2 truncate">{project.name}</h3>
             <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1">
