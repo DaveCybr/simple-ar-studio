@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR Viewer</title>
+    <title>AR Viewer - Multi Target</title>
     <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.1.4/dist/mindar-image.prod.js"></script>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.1.4/dist/mindar-image-aframe.prod.js"></script>
@@ -34,21 +34,23 @@
       .spinner {
         width: 50px;
         height: 50px;
-        border: 3px solid rgba(255,255,255,0.3);
+        border: 3px solid rgba(255, 255, 255, 0.3);
         border-top-color: #3b82f6;
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin-bottom: 20px;
       }
       @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+          transform: rotate(360deg);
+        }
       }
       .hint {
         position: fixed;
         bottom: 30px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(0,0,0,0.7);
+        background: rgba(0, 0, 0, 0.7);
         color: white;
         padding: 12px 24px;
         border-radius: 30px;
@@ -63,7 +65,7 @@
         position: fixed;
         top: 80px;
         right: 16px;
-        background: rgba(0,0,0,0.7);
+        background: rgba(0, 0, 0, 0.7);
         color: white;
         padding: 8px 16px;
         border-radius: 20px;
@@ -78,187 +80,198 @@
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <p>Memuat AR Experience...</p>
-      <p style="font-size: 12px; opacity: 0.7;">Izinkan akses kamera</p>
+      <p style="font-size: 12px; opacity: 0.7">Mohon tunggu...</p>
     </div>
 
-    <div class="hint" id="hint">
-      📱 Arahkan kamera ke salah satu marker
-    </div>
-
+    <div class="hint" id="hint">📱 Arahkan kamera ke salah satu marker</div>
     <div class="marker-count" id="marker-count"></div>
 
     <script>
-      // Get parameters from URL
       const params = new URLSearchParams(window.location.search);
-      const markersParam = params.get('markers');
-      
-      // Backward compatibility: single marker mode
-      const singleMind = params.get('mind');
-      const singleContent = params.get('content');
-      const singleType = params.get('type') || 'video';
-      const singleScale = parseFloat(params.get('scale') || '1');
-
+      const markersParam = params.get("markers");
       let markers = [];
-      
+
       if (markersParam) {
         try {
           markers = JSON.parse(decodeURIComponent(markersParam));
         } catch (e) {
-          console.error('Error parsing markers:', e);
+          console.error("Parse error:", e);
         }
-      } else if (singleMind && singleContent) {
-        // Backward compatibility
-        markers = [{
-          mind: singleMind,
-          content: singleContent,
-          type: singleType,
-          scale: singleScale,
-          name: 'Marker'
-        }];
       }
 
       if (markers.length === 0) {
-        document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Error: No markers found</p>';
+        document.getElementById("loading").innerHTML =
+          '<p style="color: #ef4444;">Error: No markers</p>';
       } else {
-        document.getElementById('marker-count').textContent = `${markers.length} marker tersedia`;
+        document.getElementById(
+          "marker-count"
+        ).textContent = `${markers.length} marker tersedia`;
 
-        // Preload all media to get dimensions
         async function preloadMedia(marker) {
           return new Promise((resolve) => {
-            if (marker.type === 'video') {
-              const video = document.createElement('video');
+            if (marker.type === "video") {
+              const video = document.createElement("video");
               video.src = marker.content;
-              video.setAttribute('crossorigin', 'anonymous');
-              video.addEventListener('loadedmetadata', () => {
+              video.crossOrigin = "anonymous";
+
+              const timeout = setTimeout(() => {
+                resolve({ ...marker, width: 16, height: 9 });
+              }, 5000);
+
+              video.onloadedmetadata = () => {
+                clearTimeout(timeout);
                 resolve({
                   ...marker,
                   width: video.videoWidth,
-                  height: video.videoHeight
+                  height: video.videoHeight,
                 });
-              });
-              video.addEventListener('error', () => {
-                resolve({ ...marker, width: 16, height: 9 }); // Fallback
-              });
+              };
+              video.onerror = () => {
+                clearTimeout(timeout);
+                resolve({ ...marker, width: 16, height: 9 });
+              };
               video.load();
             } else {
               const img = new Image();
-              img.crossOrigin = 'anonymous';
+              img.crossOrigin = "anonymous";
+
+              const timeout = setTimeout(() => {
+                resolve({ ...marker, width: 16, height: 9 });
+              }, 5000);
+
               img.onload = () => {
+                clearTimeout(timeout);
                 resolve({
                   ...marker,
                   width: img.naturalWidth,
-                  height: img.naturalHeight
+                  height: img.naturalHeight,
                 });
               };
               img.onerror = () => {
-                resolve({ ...marker, width: 16, height: 9 }); // Fallback
+                clearTimeout(timeout);
+                resolve({ ...marker, width: 16, height: 9 });
               };
               img.src = marker.content;
             }
           });
         }
 
-        async function createMultiMarkerScene() {
-          // Preload all media
+        async function createMultiTargetScene() {
+          console.log("Loading", markers.length, "markers with multi-target");
+
           const loadedMarkers = await Promise.all(markers.map(preloadMedia));
 
-          // Create A-Frame scene dynamically
-          const scene = document.createElement('a-scene');
-          
-          // Combine all .mind files (they should be combined beforehand for multi-target)
-          // For now, we'll use the first marker's mind file as the main target
-          // MindAR supports multiple targets in a single .mind file
+          // ALL markers MUST use the SAME .mind file
           const mindUrl = loadedMarkers[0].mind;
-          
-          scene.setAttribute('mindar-image', `imageTargetSrc: ${mindUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no; maxTrack: ${loadedMarkers.length};`);
-          scene.setAttribute('color-space', 'sRGB');
-          scene.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
-          scene.setAttribute('vr-mode-ui', 'enabled: false');
-          scene.setAttribute('device-orientation-permission-ui', 'enabled: false');
 
-          // Assets
-          const assets = document.createElement('a-assets');
-          
+          const scene = document.createElement("a-scene");
+          scene.setAttribute(
+            "mindar-image",
+            `imageTargetSrc: ${mindUrl}; ` +
+              `autoStart: true; ` +
+              `uiLoading: no; ` +
+              `uiScanning: no; ` +
+              `uiError: no; ` +
+              `maxTrack: ${loadedMarkers.length};`
+          );
+          scene.setAttribute("color-space", "sRGB");
+          scene.setAttribute(
+            "renderer",
+            "colorManagement: true, physicallyCorrectLights"
+          );
+          scene.setAttribute("vr-mode-ui", "enabled: false");
+          scene.setAttribute(
+            "device-orientation-permission-ui",
+            "enabled: false"
+          );
+
+          const assets = document.createElement("a-assets");
+
           loadedMarkers.forEach((marker, index) => {
-            if (marker.type === 'video') {
-              const video = document.createElement('video');
+            if (marker.type === "video") {
+              const video = document.createElement("video");
               video.id = `ar-video-${index}`;
               video.src = marker.content;
-              video.setAttribute('preload', 'auto');
-              video.setAttribute('loop', 'true');
-              video.setAttribute('playsinline', '');
-              video.setAttribute('webkit-playsinline', '');
-              video.setAttribute('crossorigin', 'anonymous');
+              video.setAttribute("preload", "metadata");
+              video.setAttribute("loop", "true");
+              video.setAttribute("playsinline", "");
+              video.setAttribute("webkit-playsinline", "");
+              video.setAttribute("crossorigin", "anonymous");
               video.muted = true;
               assets.appendChild(video);
             } else {
-              const img = document.createElement('img');
+              const img = document.createElement("img");
               img.id = `ar-image-${index}`;
               img.src = marker.content;
-              img.setAttribute('crossorigin', 'anonymous');
+              img.setAttribute("crossorigin", "anonymous");
               assets.appendChild(img);
             }
           });
-          
+
           scene.appendChild(assets);
 
-          // Camera
-          const camera = document.createElement('a-camera');
-          camera.setAttribute('position', '0 0 0');
-          camera.setAttribute('look-controls', 'enabled: false');
+          const camera = document.createElement("a-camera");
+          camera.setAttribute("position", "0 0 0");
+          camera.setAttribute("look-controls", "enabled: false");
           scene.appendChild(camera);
 
-          // Create target entities for each marker
           loadedMarkers.forEach((marker, index) => {
             const aspectRatio = marker.width / marker.height;
             const baseWidth = 1 * marker.scale;
             const baseHeight = (1 / aspectRatio) * marker.scale;
 
-            const targetEntity = document.createElement('a-entity');
-            targetEntity.setAttribute('mindar-image-target', `targetIndex: ${index}`);
+            const targetEntity = document.createElement("a-entity");
+            targetEntity.setAttribute(
+              "mindar-image-target",
+              `targetIndex: ${index}`
+            );
             targetEntity.id = `target-${index}`;
 
-            if (marker.type === 'video') {
-              const videoPlane = document.createElement('a-video');
-              videoPlane.setAttribute('src', `#ar-video-${index}`);
-              videoPlane.setAttribute('position', '0 0 0');
-              videoPlane.setAttribute('width', baseWidth.toString());
-              videoPlane.setAttribute('height', baseHeight.toString());
-              videoPlane.setAttribute('rotation', '0 0 0');
+            if (marker.type === "video") {
+              const videoPlane = document.createElement("a-video");
+              videoPlane.setAttribute("src", `#ar-video-${index}`);
+              videoPlane.setAttribute("position", "0 0 0");
+              videoPlane.setAttribute("width", baseWidth);
+              videoPlane.setAttribute("height", baseHeight);
+              videoPlane.setAttribute("rotation", "0 0 0");
               targetEntity.appendChild(videoPlane);
             } else {
-              const imagePlane = document.createElement('a-image');
-              imagePlane.setAttribute('src', `#ar-image-${index}`);
-              imagePlane.setAttribute('position', '0 0 0');
-              imagePlane.setAttribute('width', baseWidth.toString());
-              imagePlane.setAttribute('height', baseHeight.toString());
-              imagePlane.setAttribute('rotation', '0 0 0');
+              const imagePlane = document.createElement("a-image");
+              imagePlane.setAttribute("src", `#ar-image-${index}`);
+              imagePlane.setAttribute("position", "0 0 0");
+              imagePlane.setAttribute("width", baseWidth);
+              imagePlane.setAttribute("height", baseHeight);
+              imagePlane.setAttribute("rotation", "0 0 0");
               targetEntity.appendChild(imagePlane);
             }
 
-            // Target found/lost events
-            targetEntity.addEventListener('targetFound', () => {
-              document.getElementById('hint').textContent = `✅ ${marker.name || 'Marker'} terdeteksi!`;
-              document.getElementById('hint').style.background = 'rgba(34, 197, 94, 0.9)';
-              
-              if (marker.type === 'video') {
+            targetEntity.addEventListener("targetFound", () => {
+              console.log("Found:", marker.name);
+              document.getElementById(
+                "hint"
+              ).textContent = `✅ ${marker.name} terdeteksi!`;
+              document.getElementById("hint").style.background =
+                "rgba(34, 197, 94, 0.9)";
+
+              if (marker.type === "video") {
                 const video = document.getElementById(`ar-video-${index}`);
                 if (video) {
                   video.muted = false;
-                  video.play().catch(e => console.log('Autoplay prevented:', e));
+                  video.play().catch((e) => console.log("Play error:", e));
                 }
               }
             });
 
-            targetEntity.addEventListener('targetLost', () => {
-              document.getElementById('hint').textContent = '📱 Arahkan kamera ke salah satu marker';
-              document.getElementById('hint').style.background = 'rgba(0,0,0,0.7)';
-              
-              if (marker.type === 'video') {
+            targetEntity.addEventListener("targetLost", () => {
+              console.log("Lost:", marker.name);
+              document.getElementById("hint").textContent =
+                "📱 Arahkan ke salah satu marker";
+              document.getElementById("hint").style.background =
+                "rgba(0,0,0,0.7)";
+
+              if (marker.type === "video") {
                 const video = document.getElementById(`ar-video-${index}`);
-                if (video) {
-                  video.pause();
-                }
+                if (video) video.pause();
               }
             });
 
@@ -267,17 +280,19 @@
 
           document.body.appendChild(scene);
 
-          // Scene ready event
-          scene.addEventListener('arReady', () => {
-            document.getElementById('loading').classList.add('hidden');
+          scene.addEventListener("arReady", () => {
+            console.log("Multi-target AR ready");
+            document.getElementById("loading").classList.add("hidden");
           });
 
-          scene.addEventListener('arError', () => {
-            document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Error: Tidak dapat mengakses kamera</p>';
+          scene.addEventListener("arError", (e) => {
+            console.error("AR Error:", e);
+            document.getElementById("loading").innerHTML =
+              '<p style="color: #ef4444;">Error: Camera access denied</p>';
           });
         }
 
-        createMultiMarkerScene();
+        createMultiTargetScene();
       }
     </script>
   </body>
