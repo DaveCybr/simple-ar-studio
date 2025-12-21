@@ -5,7 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Scan, Loader2, Mail, Lock, User } from "lucide-react";
@@ -32,24 +38,38 @@ const Auth = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(email);
       passwordSchema.parse(password);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        toast({ title: "Error", description: err.errors[0].message, variant: "destructive" });
+        toast({
+          title: "Error",
+          description: err.errors[0].message,
+          variant: "destructive",
+        });
         return;
       }
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
     if (error) {
-      toast({ title: "Login Gagal", description: error.message, variant: "destructive" });
+      toast({
+        title: "Login Gagal",
+        description: error.message,
+        variant: "destructive",
+      });
     } else {
-      toast({ title: "Berhasil Login", description: "Selamat datang kembali!" });
+      toast({
+        title: "Berhasil Login",
+        description: "Selamat datang kembali!",
+      });
       navigate("/dashboard");
     }
     setLoading(false);
@@ -57,37 +77,52 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(email);
       passwordSchema.parse(password);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        toast({ title: "Error", description: err.errors[0].message, variant: "destructive" });
+        toast({
+          title: "Error",
+          description: err.errors[0].message,
+          variant: "destructive",
+        });
         return;
       }
     }
 
     setLoading(true);
     const redirectUrl = `${window.location.origin}/dashboard`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
-        data: { full_name: fullName }
-      }
+        data: { full_name: fullName },
+      },
     });
-    
+
     if (error) {
       if (error.message.includes("already registered")) {
-        toast({ title: "Akun Sudah Ada", description: "Email ini sudah terdaftar. Silakan login.", variant: "destructive" });
+        toast({
+          title: "Akun Sudah Ada",
+          description: "Email ini sudah terdaftar. Silakan login.",
+          variant: "destructive",
+        });
       } else {
-        toast({ title: "Registrasi Gagal", description: error.message, variant: "destructive" });
+        toast({
+          title: "Registrasi Gagal",
+          description: error.message,
+          variant: "destructive",
+        });
       }
     } else {
-      toast({ title: "Berhasil Daftar", description: "Akun Anda telah dibuat!" });
+      toast({
+        title: "Berhasil Daftar",
+        description: "Akun Anda telah dibuat!",
+      });
       navigate("/dashboard");
     }
     setLoading(false);
@@ -97,7 +132,7 @@ const Auth = () => {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,hsl(var(--primary)/0.1),transparent_50%)]" />
-      
+
       <Card className="w-full max-w-md relative z-10 shadow-xl border-border/50">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto p-3 rounded-xl bg-primary/10 w-fit">
@@ -105,17 +140,19 @@ const Auth = () => {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold">Web AR Manager</CardTitle>
-            <CardDescription>Masuk atau daftar untuk mengelola konten AR</CardDescription>
+            <CardDescription>
+              Masuk atau daftar untuk mengelola konten AR
+            </CardDescription>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="login">Masuk</TabsTrigger>
               <TabsTrigger value="signup">Daftar</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
@@ -154,7 +191,7 @@ const Auth = () => {
                 </Button>
               </form>
             </TabsContent>
-            
+
             <TabsContent value="signup">
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">

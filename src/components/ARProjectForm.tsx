@@ -72,17 +72,30 @@ export const ARProjectForm = ({
     formData.append("resource_type", resourceType);
     formData.append("folder", folder);
 
-    const { data, error } = await supabase.functions.invoke(
-      "upload-cloudinary",
-      {
-        body: formData,
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "upload-cloudinary",
+        {
+          body: formData,
+        }
+      );
+
+      console.log("Upload response:", { data, error });
+
+      if (error) {
+        console.error("Supabase function error:", error);
+        throw new Error(`Function error: ${error.message}`);
       }
-    );
 
-    if (error) throw error;
-    if (!data.success) throw new Error(data.error);
+      if (!data?.success) {
+        throw new Error(data?.error || "Upload failed");
+      }
 
-    return data.url;
+      return data.url;
+    } catch (err) {
+      console.error("Upload exception:", err);
+      throw err;
+    }
   };
 
   const addMarker = () => {
