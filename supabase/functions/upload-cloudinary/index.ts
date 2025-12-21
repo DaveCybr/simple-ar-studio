@@ -35,8 +35,26 @@ serve(async (req) => {
     // Generate timestamp
     const timestamp = Math.floor(Date.now() / 1000);
 
+    // Build transformation string for optimization
+    let transformation = '';
+    
+    if (resourceType === 'video') {
+      // Video optimization: compress and resize for AR
+      // Target: ~2-3MB files, 640x360 resolution, good quality
+      transformation = 'q_auto:good,w_640,h_360,c_limit,vc_h264:baseline:3.0,ac_aac,br_1500k';
+    } else if (resourceType === 'image' && folder === 'ar-content') {
+      // Image optimization for AR content: compress and resize
+      transformation = 'q_auto:good,w_1024,h_1024,c_limit,f_auto';
+    } else if (resourceType === 'image' && folder === 'ar-markers') {
+      // Marker images: keep quality but optimize format
+      transformation = 'q_auto:best,f_auto';
+    }
+
     // Build params to sign (alphabetical order, excluding file, api_key, signature, resource_type)
-    const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
+    let paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
+    if (transformation && resourceType !== 'raw') {
+      paramsToSign = `eager=${transformation}&folder=${folder}&timestamp=${timestamp}`;
+    }
     
     // Generate SHA-1 signature
     const encoder = new TextEncoder();
@@ -55,6 +73,12 @@ serve(async (req) => {
     cloudinaryFormData.append('timestamp', timestamp.toString());
     cloudinaryFormData.append('api_key', apiKey);
     cloudinaryFormData.append('signature', signature);
+    
+    // Add eager transformation for videos and images (not raw files)
+    if (transformation && resourceType !== 'raw') {
+      cloudinaryFormData.append('eager', transformation);
+      cloudinaryFormData.append('eager_async', 'false');
+    }
 
     // Upload to Cloudinary
     const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
@@ -74,13 +98,26 @@ serve(async (req) => {
 
     console.log('Upload successful:', result.secure_url);
 
+    // Return the optimized URL if available, otherwise the original
+    let optimizedUrl = result.secure_url;
+    
+    if (result.eager && result.eager.length > 0) {
+      optimizedUrl = result.eager[0].secure_url;
+      console.log('Optimized URL:', optimizedUrl);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        url: result.secure_url,
+        url: optimizedUrl,
+        original_url: result.secure_url,
         public_id: result.public_id,
         resource_type: result.resource_type,
         format: result.format,
+        width: result.width,
+        height: result.height,
+        bytes: result.bytes,
+        optimized_bytes: result.eager?.[0]?.bytes,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
