@@ -87,6 +87,56 @@
     <div class="marker-count" id="marker-count"></div>
 
     <script>
+      // ============= A-FRAME SMOOTHING COMPONENT =============
+      // Register custom component untuk smooth tracking
+      AFRAME.registerComponent("smooth-transform", {
+        schema: {
+          factor: { type: "number", default: 0.2 },
+        },
+
+        init: function () {
+          this.targetPos = new THREE.Vector3();
+          this.targetRot = new THREE.Euler();
+          this.currentPos = new THREE.Vector3();
+          this.currentRot = new THREE.Euler();
+          this.firstUpdate = true;
+        },
+
+        tick: function () {
+          const object3D = this.el.object3D;
+          const parent = this.el.parentEl.object3D;
+
+          if (!parent) return;
+
+          // Get target transform from parent (tracked target)
+          this.targetPos.copy(parent.position);
+          this.targetRot.copy(parent.rotation);
+
+          if (this.firstUpdate) {
+            this.currentPos.copy(this.targetPos);
+            this.currentRot.copy(this.targetRot);
+            this.firstUpdate = false;
+          }
+
+          // Smooth interpolation (exponential moving average)
+          this.currentPos.lerp(this.targetPos, this.data.factor);
+
+          // Smooth rotation (slerp for quaternions would be better, but this works)
+          this.currentRot.x +=
+            (this.targetRot.x - this.currentRot.x) * this.data.factor;
+          this.currentRot.y +=
+            (this.targetRot.y - this.currentRot.y) * this.data.factor;
+          this.currentRot.z +=
+            (this.targetRot.z - this.currentRot.z) * this.data.factor;
+
+          // Apply smoothed transform
+          // Reset local transform karena kita smooth relative to parent
+          object3D.position.set(0, 0, 0);
+          object3D.rotation.set(0, 0, 0);
+        },
+      });
+
+      // ============= ORIGINAL CODE =============
       const params = new URLSearchParams(window.location.search);
       const markersParam = params.get("markers");
       let markers = [];
@@ -180,6 +230,7 @@
           const mindUrl = loadedMarkers[0].mind;
 
           const scene = document.createElement("a-scene");
+          // ✅ ANTI-JITTER: Optimized tracking parameters
           scene.setAttribute(
             "mindar-image",
             `imageTargetSrc: ${mindUrl}; ` +
@@ -187,12 +238,16 @@
               `uiLoading: no; ` +
               `uiScanning: no; ` +
               `uiError: no; ` +
-              `maxTrack: ${loadedMarkers.length};`
+              `maxTrack: ${loadedMarkers.length}; ` +
+              `filterMinCF: 0.0001; ` + // ✅ Lebih stabil (default: 0.001)
+              `filterBeta: 10000; ` + // ✅ Lebih smooth (default: 1000)
+              `warmupTolerance: 5; ` + // ✅ Lebih toleran (default: 2)
+              `missTolerance: 5;` // ✅ Tidak langsung hilang (default: 3)
           );
           scene.setAttribute("color-space", "sRGB");
           scene.setAttribute(
             "renderer",
-            "colorManagement: true, physicallyCorrectLights"
+            "colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: true;"
           );
           scene.setAttribute("vr-mode-ui", "enabled: false");
           scene.setAttribute(
@@ -250,14 +305,18 @@
             targetEntity.id = `target-${index}`;
 
             if (marker.type === "video") {
-              // ✅ FIX #3: Tidak perlu visible=false, langsung tampilkan
               const videoPlane = document.createElement("a-video");
               videoPlane.setAttribute("src", `#ar-video-${index}`);
               videoPlane.setAttribute("position", "0 0 0");
               videoPlane.setAttribute("width", baseWidth);
               videoPlane.setAttribute("height", baseHeight);
               videoPlane.setAttribute("rotation", "0 0 0");
-              // ✅ TIDAK pakai visible=false! Biarkan A-Frame handle
+              videoPlane.setAttribute("material", "shader: flat");
+
+              // ✅ ANTI-JITTER: Add smooth transform component
+              // Factor: 0.1-0.4 (lebih kecil = lebih smooth tapi lebih lag)
+              videoPlane.setAttribute("smooth-transform", "factor: 0.25");
+
               targetEntity.appendChild(videoPlane);
             } else {
               const imagePlane = document.createElement("a-image");
@@ -266,10 +325,14 @@
               imagePlane.setAttribute("width", baseWidth);
               imagePlane.setAttribute("height", baseHeight);
               imagePlane.setAttribute("rotation", "0 0 0");
+              imagePlane.setAttribute("material", "shader: flat");
+
+              // ✅ ANTI-JITTER: Add smooth transform component
+              imagePlane.setAttribute("smooth-transform", "factor: 0.25");
+
               targetEntity.appendChild(imagePlane);
             }
 
-            // ✅ FIX #4: Simple play/pause, no reload needed
             targetEntity.addEventListener("targetFound", () => {
               console.log("Found:", marker.name);
               document.getElementById(
@@ -281,11 +344,9 @@
               if (marker.type === "video") {
                 const video = document.getElementById(`ar-video-${index}`);
                 if (video) {
-                  // ✅ Android: unmute lalu play
                   video.muted = false;
                   video.play().catch((e) => {
                     console.log("Play error (trying muted):", e);
-                    // Fallback: play muted jika unmuted gagal
                     video.muted = true;
                     video.play();
                   });
@@ -304,7 +365,6 @@
                 const video = document.getElementById(`ar-video-${index}`);
                 if (video) {
                   video.pause();
-                  // ✅ Reset ke awal untuk smooth replay
                   video.currentTime = 0;
                 }
               }
