@@ -170,7 +170,7 @@ const ViewAR = () => {
       />
 
       {/* Header Overlay */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between gap-2">
+      {/* <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between gap-2">
         <Link to="/">
           <Button variant="secondary" size="sm">
             <Home className="w-4 h-4 mr-2" />
@@ -207,34 +207,7 @@ const ViewAR = () => {
             {project.markers.length} marker
           </Badge>
         </div>
-      </div>
-
-      {/* Instructions based on library */}
-      <div className="absolute bottom-20 left-4 right-4 z-10">
-        <div className="bg-background/90 backdrop-blur-sm border rounded-lg p-4 max-w-md mx-auto">
-          <h3 className="font-semibold mb-2 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-primary" />
-            Cara Menggunakan
-          </h3>
-          <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-            {project.library === "mindar" ? (
-              <>
-                <li>Izinkan akses kamera browser Anda</li>
-                <li>Arahkan kamera ke marker image</li>
-                <li>Tahan posisi sampai AR muncul</li>
-                <li>Konten AR akan muncul di atas marker</li>
-              </>
-            ) : (
-              <>
-                <li>Izinkan akses kamera browser Anda</li>
-                <li>Arahkan kamera ke marker (pattern/QR/barcode)</li>
-                <li>AR akan langsung muncul saat marker terdeteksi</li>
-                <li>Gerakkan marker untuk melihat dari berbagai sudut</li>
-              </>
-            )}
-          </ol>
-        </div>
-      </div>
+      </div> */}
     </div>
   );
 };

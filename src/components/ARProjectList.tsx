@@ -1,8 +1,16 @@
+// src/components/ARProjectList.tsx - Handle missing marker images
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Layers, QrCode, Calendar } from "lucide-react";
+import {
+  Play,
+  Layers,
+  QrCode,
+  Calendar,
+  Scan,
+  Image as ImageIcon,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeModal } from "./QRCodeModal";
@@ -10,13 +18,16 @@ import { QRCodeModal } from "./QRCodeModal";
 interface ARProject {
   id: string;
   name: string;
+  library: string;
   created_at: string;
   marker_count: number;
   markers: {
     id: string;
     name: string;
-    marker_url: string;
+    marker_url: string | null;
     content_type: string;
+    library: string;
+    marker_data: any;
   }[];
 }
 
@@ -51,7 +62,6 @@ export const ARProjectList = ({
 
     setLoading(true);
 
-    // Fetch projects with their markers
     const { data: projectsData, error: projectsError } = await supabase
       .from("ar_projects")
       .select("*")
@@ -63,18 +73,18 @@ export const ARProjectList = ({
       return;
     }
 
-    // Fetch markers for each project
     const projectsWithMarkers: ARProject[] = [];
 
     for (const project of projectsData) {
       const { data: markersData } = await supabase
         .from("ar_content")
-        .select("id, name, marker_url, content_type")
+        .select("id, name, marker_url, content_type, library, marker_data")
         .eq("project_id", project.id);
 
       projectsWithMarkers.push({
         id: project.id,
         name: project.name,
+        library: project.library,
         created_at: project.created_at,
         marker_count: markersData?.length || 0,
         markers: markersData || [],
@@ -83,6 +93,33 @@ export const ARProjectList = ({
 
     setProjects(projectsWithMarkers);
     setLoading(false);
+  };
+
+  // ✅ Generate fallback icon based on marker type
+  const getMarkerFallback = (marker: ARProject["markers"][0]) => {
+    if (marker.library === "arjs") {
+      const markerType = marker.marker_data?.markerType;
+
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+          <QrCode className="w-8 h-8 mb-2" />
+          <span className="text-xs font-medium uppercase">
+            {markerType === "pattern" && "Pattern"}
+            {markerType === "barcode" &&
+              `Barcode ${marker.marker_data?.barcodeValue || 0}`}
+            {markerType === "hiro" && "Hiro"}
+            {markerType === "kanji" && "Kanji"}
+            {!markerType && "AR.js"}
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600 text-white">
+        <Scan className="w-8 h-8" />
+      </div>
+    );
   };
 
   if (loading) {
@@ -144,11 +181,15 @@ export const ARProjectList = ({
                         : ""
                     }`}
                   >
-                    <img
-                      src={marker.marker_url}
-                      alt={marker.name}
-                      className="w-full h-full object-cover"
-                    />
+                    {marker.marker_url ? (
+                      <img
+                        src={marker.marker_url}
+                        alt={marker.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      getMarkerFallback(marker)
+                    )}
                   </div>
                 ))}
               </div>
@@ -157,6 +198,22 @@ export const ARProjectList = ({
                 <Layers className="w-8 h-8 text-muted-foreground" />
               </div>
             )}
+
+            {/* Library badge */}
+            <Badge className="absolute top-2 left-2" variant="secondary">
+              {project.library === "mindar" ? (
+                <>
+                  <Scan className="w-3 h-3 mr-1" />
+                  MindAR
+                </>
+              ) : (
+                <>
+                  <QrCode className="w-3 h-3 mr-1" />
+                  AR.js
+                </>
+              )}
+            </Badge>
+
             <Badge className="absolute top-2 right-2" variant="secondary">
               <Layers className="w-3 h-3 mr-1" />
               {project.marker_count} Marker

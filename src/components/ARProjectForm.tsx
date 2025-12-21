@@ -1,4 +1,4 @@
-// src/components/ARProjectFormDual.tsx
+// src/components/ARProjectForm.tsx - FIXED with marker image upload for AR.js
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Upload,
@@ -22,11 +21,10 @@ import {
   FileVideo,
   Image,
   CheckCircle,
-  AlertCircle,
   Scan,
   QrCode,
   Info,
-  ExternalLink,
+  ImageIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -47,13 +45,12 @@ export const ARProjectFormDual = ({
   const [projectName, setProjectName] = useState("");
   const [arLibrary, setARLibrary] = useState<ARLibrary>("mindar");
   const [markers, setMarkers] = useState<(MindARMarker | ARJSMarker)[]>([]);
-  const [mindFile, setMindFile] = useState<File | null>(null); // For MindAR multi-target
+  const [mindFile, setMindFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState("");
   const { toast } = useToast();
 
-  // Initialize with appropriate marker type
   const createEmptyMarker = (): MindARMarker | ARJSMarker => {
     const baseMarker = {
       id: crypto.randomUUID(),
@@ -76,11 +73,11 @@ export const ARProjectFormDual = ({
         library: "arjs",
         patternFile: null,
         markerType: "pattern",
+        markerImageFile: null, // ✅ NEW: For preview in project list
       } as ARJSMarker;
     }
   };
 
-  // Initialize markers when library changes
   const handleLibraryChange = (library: ARLibrary) => {
     setARLibrary(library);
     setMarkers([createEmptyMarker()]);
@@ -141,53 +138,6 @@ export const ARProjectFormDual = ({
     return data.url;
   };
 
-  // Generate AR.js pattern file from image (client-side)
-  const generateARJSPattern = async (imageFile: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        img.src = e.target?.result as string;
-      };
-
-      img.onload = () => {
-        try {
-          // Simple pattern generation (in production, use proper AR.js pattern generator)
-          const canvas = document.createElement("canvas");
-          const size = 16; // AR.js pattern is 16x16
-          canvas.width = size;
-          canvas.height = size;
-          const ctx = canvas.getContext("2d");
-
-          if (!ctx) throw new Error("Canvas context failed");
-
-          ctx.drawImage(img, 0, 0, size, size);
-          const imageData = ctx.getImageData(0, 0, size, size);
-
-          // Generate pattern string (simplified - real implementation would be more complex)
-          let pattern = "";
-          for (let i = 0; i < imageData.data.length; i += 4) {
-            const r = imageData.data[i];
-            const g = imageData.data[i + 1];
-            const b = imageData.data[i + 2];
-            const gray = Math.round((r + g + b) / 3);
-            pattern += gray + " ";
-            if ((i / 4 + 1) % size === 0) pattern += "\n";
-          }
-
-          resolve(pattern);
-        } catch (err) {
-          reject(err);
-        }
-      };
-
-      img.onerror = () => reject(new Error("Failed to load image"));
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.readAsDataURL(imageFile);
-    });
-  };
-
   const validateForm = (): boolean => {
     if (!projectName.trim()) {
       toast({
@@ -233,7 +183,7 @@ export const ARProjectFormDual = ({
         if (arjsMarker.markerType === "pattern" && !arjsMarker.patternFile) {
           toast({
             title: "Error",
-            description: `Marker ${i + 1} memerlukan pattern file atau image`,
+            description: `Marker ${i + 1} memerlukan pattern file`,
             variant: "destructive",
           });
           return false;
@@ -255,7 +205,7 @@ export const ARProjectFormDual = ({
 
       const { data: projectData, error: projectError } = await supabase
         .from("ar_projects")
-        .insert({ name: projectName, user_id: user?.id })
+        .insert({ name: projectName, user_id: user?.id, library: arLibrary })
         .select()
         .single();
 
@@ -269,19 +219,19 @@ export const ARProjectFormDual = ({
         mindUrl = await uploadToCloudinary(mindFile, "raw", "ar-mind-files");
       }
 
-      const totalSteps = markers.length * (arLibrary === "mindar" ? 2 : 3);
+      const totalSteps = markers.length * 3;
       let currentStepNum = 0;
 
       for (let i = 0; i < markers.length; i++) {
         const marker = markers[i];
 
         let markerUrl = "";
-        let markerData: Record<string, any> = { library: arLibrary };
+        let markerData: Record<string, any> = {};
 
         if (arLibrary === "mindar") {
           const mindMarker = marker as MindARMarker;
 
-          setCurrentStep(`Marker ${i + 1}: Uploading marker...`);
+          setCurrentStep(`Marker ${i + 1}: Uploading marker image...`);
           currentStepNum++;
           setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
 
@@ -293,37 +243,58 @@ export const ARProjectFormDual = ({
             );
           }
 
-          markerData.mindUrl =
-            mindUrl ||
-            (mindMarker.mindFile
-              ? await uploadToCloudinary(
-                  mindMarker.mindFile,
-                  "raw",
-                  "ar-mind-files"
-                )
-              : null);
+          markerData = {
+            library: "mindar",
+            mindUrl:
+              mindUrl ||
+              (mindMarker.mindFile
+                ? await uploadToCloudinary(
+                    mindMarker.mindFile,
+                    "raw",
+                    "ar-mind-files"
+                  )
+                : null),
+          };
         } else {
           const arjsMarker = marker as ARJSMarker;
+
+          // ✅ NEW: Upload marker image for preview (optional but recommended)
+          if (arjsMarker.markerImageFile) {
+            setCurrentStep(`Marker ${i + 1}: Uploading marker preview...`);
+            currentStepNum++;
+            setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
+
+            markerUrl = await uploadToCloudinary(
+              arjsMarker.markerImageFile,
+              "image",
+              "ar-markers"
+            );
+          }
 
           setCurrentStep(`Marker ${i + 1}: Processing pattern...`);
           currentStepNum++;
           setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
 
+          markerData = {
+            library: "arjs",
+            markerType: arjsMarker.markerType,
+          };
+
           if (arjsMarker.markerType === "pattern" && arjsMarker.patternFile) {
-            // Upload pattern file
-            markerUrl = await uploadToCloudinary(
+            const patternUrl = await uploadToCloudinary(
               arjsMarker.patternFile,
               "raw",
               "ar-patterns"
             );
-            markerData.patternUrl = markerUrl;
+            markerData.patternUrl = patternUrl;
           } else if (arjsMarker.markerType === "barcode") {
             markerData.barcodeValue = arjsMarker.barcodeValue || 0;
-          } else {
-            markerData.preset = arjsMarker.markerType; // 'hiro' or 'kanji'
+          } else if (
+            arjsMarker.markerType === "hiro" ||
+            arjsMarker.markerType === "kanji"
+          ) {
+            markerData.preset = arjsMarker.markerType;
           }
-
-          markerData.markerType = arjsMarker.markerType;
         }
 
         setCurrentStep(`Marker ${i + 1}: Uploading content...`);
@@ -339,11 +310,12 @@ export const ARProjectFormDual = ({
         );
 
         setCurrentStep(`Marker ${i + 1}: Saving...`);
+
         const { error: dbError } = await supabase.from("ar_content").insert({
           name: marker.name,
           library: arLibrary,
-          marker_url: markerUrl,
-          marker_data: JSON.stringify(markerData),
+          marker_url: markerUrl || null, // ✅ Can be null if no image uploaded
+          marker_data: markerData,
           content_url: contentUrl,
           content_type: marker.contentType,
           user_id: user?.id,
@@ -351,7 +323,10 @@ export const ARProjectFormDual = ({
           project_id: projectId,
         });
 
-        if (dbError) throw dbError;
+        if (dbError) {
+          console.error("Database insert error:", dbError);
+          throw dbError;
+        }
       }
 
       setUploadProgress(100);
@@ -420,7 +395,7 @@ export const ARProjectFormDual = ({
               >
                 <CardContent
                   className="p-4 flex items-start gap-3"
-                  onClick={() => handleLibraryChange("mindar")}
+                  onClick={() => !uploading && handleLibraryChange("mindar")}
                 >
                   <RadioGroupItem value="mindar" id="mindar" />
                   <div className="flex-1">
@@ -444,7 +419,7 @@ export const ARProjectFormDual = ({
               >
                 <CardContent
                   className="p-4 flex items-start gap-3"
-                  onClick={() => handleLibraryChange("arjs")}
+                  onClick={() => !uploading && handleLibraryChange("arjs")}
                 >
                   <RadioGroupItem value="arjs" id="arjs" />
                   <div className="flex-1">
@@ -463,7 +438,6 @@ export const ARProjectFormDual = ({
             </div>
           </RadioGroup>
 
-          {/* Library Info */}
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs">
@@ -517,7 +491,6 @@ export const ARProjectFormDual = ({
           />
         </div>
 
-        {/* MindAR specific: .mind file for multi-target */}
         {arLibrary === "mindar" && markers.length > 1 && (
           <div className="space-y-2">
             <Label htmlFor="mindFile">Combined .mind File *</Label>
@@ -579,7 +552,6 @@ export const ARProjectFormDual = ({
                   />
                 </div>
 
-                {/* MindAR Marker Fields */}
                 {arLibrary === "mindar" && (
                   <div className="space-y-2">
                     <Label>Marker Image *</Label>
@@ -593,10 +565,12 @@ export const ARProjectFormDual = ({
                       }
                       disabled={uploading}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Upload gambar yang akan dideteksi
+                    </p>
                   </div>
                 )}
 
-                {/* AR.js Marker Fields */}
                 {arLibrary === "arjs" && (
                   <>
                     <div className="space-y-2">
@@ -639,6 +613,27 @@ export const ARProjectFormDual = ({
                       </RadioGroup>
                     </div>
 
+                    {/* ✅ NEW: Marker Image Upload for AR.js */}
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4" />
+                        Marker Preview Image (Opsional)
+                      </Label>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          updateMarker(index, {
+                            markerImageFile: e.target.files?.[0] || null,
+                          })
+                        }
+                        disabled={uploading}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Upload foto marker untuk preview di daftar project
+                      </p>
+                    </div>
+
                     {(marker as ARJSMarker).markerType === "pattern" && (
                       <div className="space-y-2">
                         <Label>Pattern File (.patt) *</Label>
@@ -653,14 +648,7 @@ export const ARProjectFormDual = ({
                           disabled={uploading}
                         />
                         <p className="text-xs text-muted-foreground">
-                          Generate di{" "}
-                          <a
-                            href="https://jeromeetienne.github.io/AR.js/three.js/examples/marker-training/examples/generator.html"
-                            target="_blank"
-                            className="text-primary underline"
-                          >
-                            AR.js Marker Training
-                          </a>
+                          File .patt dari AR.js Pattern Generator
                         </p>
                       </div>
                     )}
@@ -685,7 +673,6 @@ export const ARProjectFormDual = ({
                   </>
                 )}
 
-                {/* Content Selection */}
                 <div className="flex gap-4">
                   <Button
                     type="button"

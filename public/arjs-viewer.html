@@ -45,44 +45,36 @@
           transform: rotate(360deg);
         }
       }
+      /* Clean production UI - minimal hints */
       .hint {
         position: fixed;
-        bottom: 30px;
+        bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 30px;
-        font-family: system-ui, -apple-system, sans-serif;
-        font-size: 14px;
-        z-index: 100;
-        text-align: center;
-        backdrop-filter: blur(10px);
-        max-width: 90%;
-      }
-      .marker-count {
-        position: fixed;
-        top: 80px;
-        right: 16px;
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.6);
         color: white;
         padding: 8px 16px;
         border-radius: 20px;
         font-family: system-ui, -apple-system, sans-serif;
         font-size: 12px;
         z-index: 100;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        opacity: 0.8;
+        pointer-events: none;
+      }
+      .hint.found {
+        background: rgba(34, 197, 94, 0.6);
       }
     </style>
   </head>
   <body>
     <div class="loading" id="loading">
       <div class="spinner"></div>
-      <p>Memuat AR.js Experience...</p>
+      <p>Memuat AR...</p>
     </div>
 
-    <div class="hint" id="hint">📱 Arahkan kamera ke marker</div>
-    <div class="marker-count" id="marker-count"></div>
+    <div class="hint" id="hint">Arahkan kamera ke marker</div>
 
     <script>
       const params = new URLSearchParams(window.location.search);
@@ -99,16 +91,12 @@
 
       if (markers.length === 0) {
         document.getElementById("loading").innerHTML =
-          '<p style="color: #ef4444;">Error: No markers</p>';
+          '<p style="color: #ef4444;">Error: Marker tidak ditemukan</p>';
       } else {
-        document.getElementById(
-          "marker-count"
-        ).textContent = `${markers.length} marker tersedia`;
-
         function createARJSScene() {
           const scene = document.createElement("a-scene");
 
-          // AR.js configuration
+          // AR.js configuration - enhanced
           scene.setAttribute("embedded", "");
           scene.setAttribute(
             "arjs",
@@ -116,7 +104,10 @@
               "debugUIEnabled: false; " +
               "detectionMode: mono_and_matrix; " +
               "matrixCodeType: 3x3; " +
-              "trackingMethod: best;"
+              "trackingMethod: best; " +
+              "maxDetectionRate: 60; " +
+              "canvasWidth: 640; " +
+              "canvasHeight: 480;"
           );
           scene.setAttribute("vr-mode-ui", "enabled: false");
 
@@ -140,19 +131,26 @@
                 marker.markerData.barcodeValue || 0
               );
             } else {
-              markerEntity.setAttribute("preset", marker.markerData.preset); // hiro or kanji
+              markerEntity.setAttribute(
+                "preset",
+                marker.markerData.preset || "hiro"
+              );
             }
 
             markerEntity.setAttribute("id", `marker-${index}`);
             markerEntity.setAttribute("smooth", "true");
-            markerEntity.setAttribute("smoothCount", "10");
+            markerEntity.setAttribute("smoothCount", "5");
             markerEntity.setAttribute("smoothTolerance", "0.01");
-            markerEntity.setAttribute("smoothThreshold", "5");
+            markerEntity.setAttribute("smoothThreshold", "2");
 
-            // Calculate aspect ratio
-            const aspectRatio = 16 / 9; // default
-            const baseWidth = 1 * marker.scale;
-            const baseHeight = (1 / aspectRatio) * marker.scale;
+            // FIXED: Portrait 9:16 aspect ratio (vertical)
+            const scale = marker.scale || 1;
+
+            // For portrait 9:16 content (vertical)
+            // Height HARUS lebih besar dari Width
+            const baseHeight = 2.0 * scale; // Height (tinggi/vertikal)
+            const baseWidth = (9 / 16) * baseHeight; // Width (lebar) - maintains 9:16
+            // Result with scale=1.2: 1.125 x 2.4 (proper 9:16 portrait)
 
             // Add content
             if (marker.type === "video") {
@@ -170,6 +168,7 @@
               video.setAttribute("loop", "true");
               video.setAttribute("playsinline", "");
               video.setAttribute("webkit-playsinline", "");
+              video.preload = "auto";
               video.muted = true;
               assets.appendChild(video);
 
@@ -180,6 +179,10 @@
               videoPlane.setAttribute("width", baseWidth);
               videoPlane.setAttribute("height", baseHeight);
               videoPlane.setAttribute("rotation", "-90 0 0");
+              videoPlane.setAttribute(
+                "material",
+                "shader: flat; side: double;"
+              );
               markerEntity.appendChild(videoPlane);
             } else {
               // Image content
@@ -189,43 +192,46 @@
               imagePlane.setAttribute("width", baseWidth);
               imagePlane.setAttribute("height", baseHeight);
               imagePlane.setAttribute("rotation", "-90 0 0");
+              imagePlane.setAttribute(
+                "material",
+                "shader: flat; side: double;"
+              );
               markerEntity.appendChild(imagePlane);
             }
 
             // Add event listeners
             markerEntity.addEventListener("markerFound", () => {
-              console.log("Found:", marker.name);
-              document.getElementById(
-                "hint"
-              ).textContent = `✅ ${marker.name} terdeteksi!`;
-              document.getElementById("hint").style.background =
-                "rgba(34, 197, 94, 0.9)";
+              const hint = document.getElementById("hint");
+              hint.textContent = `${marker.name} terdeteksi`;
+              hint.classList.add("found");
 
               if (marker.type === "video") {
                 const video = document.getElementById(`arjs-video-${index}`);
                 if (video) {
-                  video.muted = false;
-                  video.play().catch((e) => {
-                    console.log("Play error:", e);
-                    video.muted = true;
-                    video.play();
-                  });
+                  video
+                    .play()
+                    .then(() => {
+                      setTimeout(() => (video.muted = false), 500);
+                    })
+                    .catch(() => {
+                      video.muted = true;
+                      video.play();
+                    });
                 }
               }
             });
 
             markerEntity.addEventListener("markerLost", () => {
-              console.log("Lost:", marker.name);
-              document.getElementById("hint").textContent =
-                "📱 Arahkan kamera ke marker";
-              document.getElementById("hint").style.background =
-                "rgba(0,0,0,0.7)";
+              const hint = document.getElementById("hint");
+              hint.textContent = "Arahkan kamera ke marker";
+              hint.classList.remove("found");
 
               if (marker.type === "video") {
                 const video = document.getElementById(`arjs-video-${index}`);
                 if (video) {
                   video.pause();
                   video.currentTime = 0;
+                  video.muted = true;
                 }
               }
             });
