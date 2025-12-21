@@ -1,14 +1,17 @@
+// src/pages/ViewAR.tsx - Updated with dual library support
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertCircle, Home } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, AlertCircle, Home, Scan, QrCode } from "lucide-react";
 
 interface ARMarker {
   id: string;
   name: string;
+  library: "mindar" | "arjs";
   marker_url: string;
-  mind_file_url: string;
+  marker_data: any;
   content_url: string;
   content_type: string;
   scale: number;
@@ -17,6 +20,7 @@ interface ARMarker {
 interface ARProject {
   id: string;
   name: string;
+  library: "mindar" | "arjs";
   markers: ARMarker[];
 }
 
@@ -34,7 +38,7 @@ const ViewAR = () => {
         return;
       }
 
-      // First try to fetch as a project
+      // Fetch project
       const { data: projectData, error: projectError } = await supabase
         .from("ar_projects")
         .select("*")
@@ -42,7 +46,7 @@ const ViewAR = () => {
         .maybeSingle();
 
       if (projectData) {
-        // Fetch all markers for this project
+        // Fetch markers
         const { data: markersData, error: markersError } = await supabase
           .from("ar_content")
           .select("*")
@@ -57,13 +61,14 @@ const ViewAR = () => {
         setProject({
           id: projectData.id,
           name: projectData.name,
+          library: projectData.library || "mindar",
           markers: markersData,
         });
         setLoading(false);
         return;
       }
 
-      // Fallback: try to fetch as single ar_content (backward compatibility)
+      // Fallback: single marker (backward compatibility)
       const { data: contentData, error: contentError } = await supabase
         .from("ar_content")
         .select("*")
@@ -76,10 +81,10 @@ const ViewAR = () => {
         return;
       }
 
-      // Single marker fallback
       setProject({
         id: contentData.id,
         name: contentData.name,
+        library: contentData.library || "mindar",
         markers: [contentData],
       });
       setLoading(false);
@@ -121,39 +126,113 @@ const ViewAR = () => {
     );
   }
 
-  // Build URL params for multi-marker
-  const markersParam = encodeURIComponent(
-    JSON.stringify(
-      project.markers.map((m) => ({
-        mind: m.mind_file_url,
-        content: m.content_url,
-        type: m.content_type,
-        scale: m.scale || 1,
-        name: m.name,
-      }))
-    )
-  );
+  // Prepare markers data based on library
+  let markersParam: string;
+  let viewerUrl: string;
 
-  // Use absolute path to public file (not through React Router)
-  const arViewerUrl = `/ar-viewer.html?markers=${markersParam}`;
+  if (project.library === "mindar") {
+    // MindAR format
+    markersParam = encodeURIComponent(
+      JSON.stringify(
+        project.markers.map((m) => ({
+          mind: m.marker_data?.mindUrl || "",
+          content: m.content_url,
+          type: m.content_type,
+          scale: m.scale || 1,
+          name: m.name,
+        }))
+      )
+    );
+    viewerUrl = `/ar-viewer.html?markers=${markersParam}`;
+  } else {
+    // AR.js format
+    markersParam = encodeURIComponent(
+      JSON.stringify(
+        project.markers.map((m) => ({
+          name: m.name,
+          markerData: m.marker_data,
+          content: m.content_url,
+          type: m.content_type,
+          scale: m.scale || 1,
+        }))
+      )
+    );
+    viewerUrl = `/arjs-viewer.html?markers=${markersParam}`;
+  }
 
   return (
     <div className="relative w-full h-screen">
       <iframe
-        src={arViewerUrl}
+        src={viewerUrl}
         className="w-full h-full border-0"
         allow="camera; gyroscope; accelerometer; autoplay"
         title={`AR Viewer - ${project.name}`}
       />
-      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+
+      {/* Header Overlay */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between gap-2">
         <Link to="/">
           <Button variant="secondary" size="sm">
             <Home className="w-4 h-4 mr-2" />
             Beranda
           </Button>
         </Link>
-        <div className="bg-background/80 backdrop-blur px-3 py-1.5 rounded-full text-sm font-medium">
-          {project.name} ({project.markers.length} marker)
+
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="secondary"
+            className="backdrop-blur-sm bg-background/80"
+          >
+            {project.library === "mindar" ? (
+              <>
+                <Scan className="w-3 h-3 mr-1" />
+                MindAR
+              </>
+            ) : (
+              <>
+                <QrCode className="w-3 h-3 mr-1" />
+                AR.js
+              </>
+            )}
+          </Badge>
+
+          <div className="bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-sm font-medium border">
+            {project.name}
+          </div>
+
+          <Badge
+            variant="outline"
+            className="backdrop-blur-sm bg-background/80"
+          >
+            {project.markers.length} marker
+          </Badge>
+        </div>
+      </div>
+
+      {/* Instructions based on library */}
+      <div className="absolute bottom-20 left-4 right-4 z-10">
+        <div className="bg-background/90 backdrop-blur-sm border rounded-lg p-4 max-w-md mx-auto">
+          <h3 className="font-semibold mb-2 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-primary" />
+            Cara Menggunakan
+          </h3>
+          <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+            {project.library === "mindar" ? (
+              <>
+                <li>Izinkan akses kamera browser Anda</li>
+                <li>Arahkan kamera ke marker image</li>
+                <li>Tahan posisi sampai AR muncul</li>
+                <li>Konten AR akan muncul di atas marker</li>
+              </>
+            ) : (
+              <>
+                <li>Izinkan akses kamera browser Anda</li>
+                <li>Arahkan kamera ke marker (pattern/QR/barcode)</li>
+                <li>AR akan langsung muncul saat marker terdeteksi</li>
+                <li>Gerakkan marker untuk melihat dari berbagai sudut</li>
+              </>
+            )}
+          </ol>
         </div>
       </div>
     </div>

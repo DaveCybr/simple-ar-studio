@@ -3,27 +3,33 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ARProjectForm } from "@/components/ARProjectForm";
 import { ARProjectList } from "@/components/ARProjectList";
-import { 
-  Scan, 
-  Upload, 
-  Layers, 
-  LogOut, 
+import {
+  Scan,
+  Upload,
+  Layers,
+  LogOut,
   User,
   Crown,
-  Loader2
+  Loader2,
 } from "lucide-react";
+import { ARProjectFormDual } from "@/components/ARProjectForm";
 
 interface Profile {
   id: string;
   email: string | null;
   full_name: string | null;
-  subscription_tier: 'free' | 'pro' | 'enterprise';
+  subscription_tier: "free" | "pro" | "enterprise";
   upload_quota: number;
   uploads_used: number;
 }
@@ -44,13 +50,13 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
-      
+
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
         .single();
-      
+
       if (data && !error) {
         setProfile(data);
       }
@@ -68,14 +74,14 @@ const Dashboard = () => {
 
   const handleUploadSuccess = async () => {
     setRefreshKey((prev) => prev + 1);
-    
+
     // Update uploads_used
     if (profile) {
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ uploads_used: profile.uploads_used + 1 })
-        .eq('id', profile.id);
-      
+        .eq("id", profile.id);
+
       if (!error) {
         setProfile({ ...profile, uploads_used: profile.uploads_used + 1 });
       }
@@ -96,9 +102,9 @@ const Dashboard = () => {
   }
 
   const tierLabels = {
-    free: 'Free',
-    pro: 'Pro',
-    enterprise: 'Enterprise'
+    free: "Free",
+    pro: "Pro",
+    enterprise: "Enterprise",
   };
 
   const tierMarkerLimits = {
@@ -107,9 +113,14 @@ const Dashboard = () => {
     enterprise: 5,
   };
 
-  const canUpload = profile ? profile.uploads_used < profile.upload_quota || profile.subscription_tier === 'enterprise' : false;
-  const uploadProgress = profile ? (profile.uploads_used / profile.upload_quota) * 100 : 0;
-  const maxMarkers = tierMarkerLimits[profile?.subscription_tier || 'free'];
+  const canUpload = profile
+    ? profile.uploads_used < profile.upload_quota ||
+      profile.subscription_tier === "enterprise"
+    : false;
+  const uploadProgress = profile
+    ? (profile.uploads_used / profile.upload_quota) * 100
+    : 0;
+  const maxMarkers = tierMarkerLimits[profile?.subscription_tier || "free"];
 
   return (
     <div className="min-h-screen bg-background">
@@ -122,17 +133,27 @@ const Dashboard = () => {
             </div>
             <span className="font-bold text-lg">AR Manager</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <Badge variant={profile?.subscription_tier === 'free' ? 'secondary' : 'default'}>
-                {profile?.subscription_tier === 'enterprise' && <Crown className="w-3 h-3 mr-1" />}
-                {tierLabels[profile?.subscription_tier || 'free']}
+              <Badge
+                variant={
+                  profile?.subscription_tier === "free"
+                    ? "secondary"
+                    : "default"
+                }
+              >
+                {profile?.subscription_tier === "enterprise" && (
+                  <Crown className="w-3 h-3 mr-1" />
+                )}
+                {tierLabels[profile?.subscription_tier || "free"]}
               </Badge>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <User className="w-4 h-4" />
-              <span className="hidden sm:inline">{profile?.email || user?.email}</span>
+              <span className="hidden sm:inline">
+                {profile?.email || user?.email}
+              </span>
             </div>
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
               <LogOut className="w-4 h-4" />
@@ -149,23 +170,28 @@ const Dashboard = () => {
               <div>
                 <CardTitle className="text-lg">Kuota Project</CardTitle>
                 <CardDescription>
-                  {profile?.subscription_tier === 'enterprise' 
-                    ? 'Unlimited project' 
-                    : `${profile?.uploads_used || 0} dari ${profile?.upload_quota || 3} project digunakan`
-                  }
+                  {profile?.subscription_tier === "enterprise"
+                    ? "Unlimited project"
+                    : `${profile?.uploads_used || 0} dari ${
+                        profile?.upload_quota || 3
+                      } project digunakan`}
                   <span className="ml-2 text-xs">
                     (Maks {maxMarkers} marker per project)
                   </span>
                 </CardDescription>
               </div>
-              {profile?.subscription_tier !== 'enterprise' && (
-                <Button variant="outline" size="sm" onClick={() => navigate('/pricing')}>
+              {profile?.subscription_tier !== "enterprise" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/pricing")}
+                >
                   Upgrade
                 </Button>
               )}
             </div>
           </CardHeader>
-          {profile?.subscription_tier !== 'enterprise' && (
+          {profile?.subscription_tier !== "enterprise" && (
             <CardContent>
               <Progress value={uploadProgress} className="h-2" />
             </CardContent>
@@ -179,19 +205,29 @@ const Dashboard = () => {
               <Layers className="w-4 h-4" />
               Project AR
             </TabsTrigger>
-            <TabsTrigger value="upload" className="flex items-center gap-2" disabled={!canUpload}>
+            <TabsTrigger
+              value="upload"
+              className="flex items-center gap-2"
+              disabled={!canUpload}
+            >
               <Upload className="w-4 h-4" />
               Buat Project
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="list">
-            <ARProjectList onSelectProject={handleSelectProject} refresh={refreshKey} />
+            <ARProjectList
+              onSelectProject={handleSelectProject}
+              refresh={refreshKey}
+            />
           </TabsContent>
 
           <TabsContent value="upload" className="flex justify-center">
             {canUpload ? (
-              <ARProjectForm onSuccess={handleUploadSuccess} maxMarkers={maxMarkers} />
+              <ARProjectFormDual
+                onSuccess={handleUploadSuccess}
+                maxMarkers={maxMarkers}
+              />
             ) : (
               <Card className="max-w-md">
                 <CardContent className="p-8 text-center">
@@ -202,7 +238,7 @@ const Dashboard = () => {
                   <p className="text-muted-foreground mb-4">
                     Anda telah menggunakan semua kuota project bulan ini.
                   </p>
-                  <Button onClick={() => navigate('/pricing')}>
+                  <Button onClick={() => navigate("/pricing")}>
                     Upgrade Sekarang
                   </Button>
                 </CardContent>

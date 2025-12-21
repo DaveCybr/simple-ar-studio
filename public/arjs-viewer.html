@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR.js Viewer - Multi Marker</title>
+    <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      .loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        color: white;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .loading.hidden {
+        display: none;
+      }
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .hint {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 30px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        z-index: 100;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        max-width: 90%;
+      }
+      .marker-count {
+        position: fixed;
+        top: 80px;
+        right: 16px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 12px;
+        z-index: 100;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Memuat AR.js Experience...</p>
+    </div>
+
+    <div class="hint" id="hint">📱 Arahkan kamera ke marker</div>
+    <div class="marker-count" id="marker-count"></div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const markersParam = params.get("markers");
+      let markers = [];
+
+      if (markersParam) {
+        try {
+          markers = JSON.parse(decodeURIComponent(markersParam));
+        } catch (e) {
+          console.error("Parse error:", e);
+        }
+      }
+
+      if (markers.length === 0) {
+        document.getElementById("loading").innerHTML =
+          '<p style="color: #ef4444;">Error: No markers</p>';
+      } else {
+        document.getElementById(
+          "marker-count"
+        ).textContent = `${markers.length} marker tersedia`;
+
+        function createARJSScene() {
+          const scene = document.createElement("a-scene");
+
+          // AR.js configuration
+          scene.setAttribute("embedded", "");
+          scene.setAttribute(
+            "arjs",
+            "sourceType: webcam; " +
+              "debugUIEnabled: false; " +
+              "detectionMode: mono_and_matrix; " +
+              "matrixCodeType: 3x3; " +
+              "trackingMethod: best;"
+          );
+          scene.setAttribute("vr-mode-ui", "enabled: false");
+
+          // Camera
+          const camera = document.createElement("a-entity");
+          camera.setAttribute("camera", "");
+          scene.appendChild(camera);
+
+          // Create markers
+          markers.forEach((marker, index) => {
+            const markerEntity = document.createElement("a-marker");
+
+            // Set marker type
+            if (marker.markerData.markerType === "pattern") {
+              markerEntity.setAttribute("type", "pattern");
+              markerEntity.setAttribute("url", marker.markerData.patternUrl);
+            } else if (marker.markerData.markerType === "barcode") {
+              markerEntity.setAttribute("type", "barcode");
+              markerEntity.setAttribute(
+                "value",
+                marker.markerData.barcodeValue || 0
+              );
+            } else {
+              markerEntity.setAttribute("preset", marker.markerData.preset); // hiro or kanji
+            }
+
+            markerEntity.setAttribute("id", `marker-${index}`);
+            markerEntity.setAttribute("smooth", "true");
+            markerEntity.setAttribute("smoothCount", "10");
+            markerEntity.setAttribute("smoothTolerance", "0.01");
+            markerEntity.setAttribute("smoothThreshold", "5");
+
+            // Calculate aspect ratio
+            const aspectRatio = 16 / 9; // default
+            const baseWidth = 1 * marker.scale;
+            const baseHeight = (1 / aspectRatio) * marker.scale;
+
+            // Add content
+            if (marker.type === "video") {
+              // Create video asset
+              let assets = scene.querySelector("a-assets");
+              if (!assets) {
+                assets = document.createElement("a-assets");
+                scene.appendChild(assets);
+              }
+
+              const video = document.createElement("video");
+              video.id = `arjs-video-${index}`;
+              video.src = marker.content;
+              video.setAttribute("crossorigin", "anonymous");
+              video.setAttribute("loop", "true");
+              video.setAttribute("playsinline", "");
+              video.setAttribute("webkit-playsinline", "");
+              video.muted = true;
+              assets.appendChild(video);
+
+              // Create video plane
+              const videoPlane = document.createElement("a-video");
+              videoPlane.setAttribute("src", `#arjs-video-${index}`);
+              videoPlane.setAttribute("position", "0 0 0");
+              videoPlane.setAttribute("width", baseWidth);
+              videoPlane.setAttribute("height", baseHeight);
+              videoPlane.setAttribute("rotation", "-90 0 0");
+              markerEntity.appendChild(videoPlane);
+            } else {
+              // Image content
+              const imagePlane = document.createElement("a-image");
+              imagePlane.setAttribute("src", marker.content);
+              imagePlane.setAttribute("position", "0 0 0");
+              imagePlane.setAttribute("width", baseWidth);
+              imagePlane.setAttribute("height", baseHeight);
+              imagePlane.setAttribute("rotation", "-90 0 0");
+              markerEntity.appendChild(imagePlane);
+            }
+
+            // Add event listeners
+            markerEntity.addEventListener("markerFound", () => {
+              console.log("Found:", marker.name);
+              document.getElementById(
+                "hint"
+              ).textContent = `✅ ${marker.name} terdeteksi!`;
+              document.getElementById("hint").style.background =
+                "rgba(34, 197, 94, 0.9)";
+
+              if (marker.type === "video") {
+                const video = document.getElementById(`arjs-video-${index}`);
+                if (video) {
+                  video.muted = false;
+                  video.play().catch((e) => {
+                    console.log("Play error:", e);
+                    video.muted = true;
+                    video.play();
+                  });
+                }
+              }
+            });
+
+            markerEntity.addEventListener("markerLost", () => {
+              console.log("Lost:", marker.name);
+              document.getElementById("hint").textContent =
+                "📱 Arahkan kamera ke marker";
+              document.getElementById("hint").style.background =
+                "rgba(0,0,0,0.7)";
+
+              if (marker.type === "video") {
+                const video = document.getElementById(`arjs-video-${index}`);
+                if (video) {
+                  video.pause();
+                  video.currentTime = 0;
+                }
+              }
+            });
+
+            scene.appendChild(markerEntity);
+          });
+
+          document.body.appendChild(scene);
+
+          // Hide loading when ready
+          setTimeout(() => {
+            document.getElementById("loading").classList.add("hidden");
+          }, 2000);
+        }
+
+        createARJSScene();
+      }
+    </script>
+  </body>
+</html>
