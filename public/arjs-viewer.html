@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR.js Viewer - Multi Marker</title>
+    <title>AR.js Viewer - Rotation Test</title>
     <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -45,10 +45,9 @@
           transform: rotate(360deg);
         }
       }
-      /* Clean production UI - minimal hints */
       .hint {
         position: fixed;
-        bottom: 20px;
+        bottom: 80px;
         left: 50%;
         transform: translateX(-50%);
         background: rgba(0, 0, 0, 0.6);
@@ -66,6 +65,54 @@
       .hint.found {
         background: rgba(34, 197, 94, 0.6);
       }
+
+      /* Rotation Controls */
+      .controls {
+        position: fixed;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        padding: 12px;
+        border-radius: 12px;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-family: system-ui, -apple-system, sans-serif;
+        min-width: 300px;
+      }
+      .controls button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .controls button:active {
+        background: #2563eb;
+      }
+      .rotation-display {
+        color: #22c55e;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+        background: rgba(34, 197, 94, 0.1);
+        padding: 6px;
+        border-radius: 6px;
+      }
+      .preset-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .preset-grid button {
+        font-size: 10px;
+        padding: 6px;
+      }
     </style>
   </head>
   <body>
@@ -76,10 +123,42 @@
 
     <div class="hint" id="hint">Arahkan kamera ke marker</div>
 
+    <div class="controls" id="controls" style="display: none">
+      <div class="rotation-display" id="rotationDisplay">
+        Rotation: 0° 0° 0°
+      </div>
+
+      <div
+        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px"
+      >
+        <button onclick="adjustRotation('x', -15)">X -15°</button>
+        <button onclick="adjustRotation('y', -15)">Y -15°</button>
+        <button onclick="adjustRotation('z', -15)">Z -15°</button>
+        <button onclick="adjustRotation('x', 15)">X +15°</button>
+        <button onclick="adjustRotation('y', 15)">Y +15°</button>
+        <button onclick="adjustRotation('z', 15)">Z +15°</button>
+      </div>
+
+      <div class="preset-grid">
+        <button onclick="setRotation(0, 0, 0)">Flat (0,0,0)</button>
+        <button onclick="setRotation(-90, 0, 0)">X-90</button>
+        <button onclick="setRotation(0, -90, 0)">Y-90</button>
+        <button onclick="setRotation(0, 0, -90)">Z-90</button>
+        <button onclick="setRotation(90, 0, 0)">X+90</button>
+        <button onclick="setRotation(0, 180, 0)">Y+180</button>
+      </div>
+
+      <button onclick="resetRotation()" style="background: #ef4444">
+        Reset
+      </button>
+    </div>
+
     <script>
       const params = new URLSearchParams(window.location.search);
       const markersParam = params.get("markers");
       let markers = [];
+      let currentRotation = { x: 0, y: 0, z: 0 };
+      let videoPlanes = [];
 
       if (markersParam) {
         try {
@@ -89,6 +168,31 @@
         }
       }
 
+      function adjustRotation(axis, amount) {
+        currentRotation[axis] += amount;
+        updateAllRotations();
+      }
+
+      function setRotation(x, y, z) {
+        currentRotation = { x, y, z };
+        updateAllRotations();
+      }
+
+      function resetRotation() {
+        currentRotation = { x: 0, y: 0, z: 0 };
+        updateAllRotations();
+      }
+
+      function updateAllRotations() {
+        const rotString = `${currentRotation.x} ${currentRotation.y} ${currentRotation.z}`;
+        videoPlanes.forEach((plane) => {
+          plane.setAttribute("rotation", rotString);
+        });
+        document.getElementById(
+          "rotationDisplay"
+        ).textContent = `Rotation: ${currentRotation.x}° ${currentRotation.y}° ${currentRotation.z}°`;
+      }
+
       if (markers.length === 0) {
         document.getElementById("loading").innerHTML =
           '<p style="color: #ef4444;">Error: Marker tidak ditemukan</p>';
@@ -96,7 +200,6 @@
         function createARJSScene() {
           const scene = document.createElement("a-scene");
 
-          // AR.js configuration - enhanced
           scene.setAttribute("embedded", "");
           scene.setAttribute(
             "arjs",
@@ -110,17 +213,18 @@
               "canvasHeight: 480;"
           );
           scene.setAttribute("vr-mode-ui", "enabled: false");
+          scene.setAttribute(
+            "renderer",
+            "logarithmicDepthBuffer: true; precision: medium;"
+          );
 
-          // Camera
           const camera = document.createElement("a-entity");
           camera.setAttribute("camera", "");
           scene.appendChild(camera);
 
-          // Create markers
           markers.forEach((marker, index) => {
             const markerEntity = document.createElement("a-marker");
 
-            // Set marker type
             if (marker.markerData.markerType === "pattern") {
               markerEntity.setAttribute("type", "pattern");
               markerEntity.setAttribute("url", marker.markerData.patternUrl);
@@ -143,18 +247,11 @@
             markerEntity.setAttribute("smoothTolerance", "0.01");
             markerEntity.setAttribute("smoothThreshold", "2");
 
-            // FIXED: Portrait 9:16 aspect ratio (vertical)
             const scale = marker.scale || 1;
+            const baseHeight = 2.0 * scale;
+            const baseWidth = (9 / 16) * baseHeight;
 
-            // For portrait 9:16 content (vertical)
-            // Height HARUS lebih besar dari Width
-            const baseHeight = 2.0 * scale; // Height (tinggi/vertikal)
-            const baseWidth = (9 / 16) * baseHeight; // Width (lebar) - maintains 9:16
-            // Result with scale=1.2: 1.125 x 2.4 (proper 9:16 portrait)
-
-            // Add content
             if (marker.type === "video") {
-              // Create video asset
               let assets = scene.querySelector("a-assets");
               if (!assets) {
                 assets = document.createElement("a-assets");
@@ -172,7 +269,6 @@
               video.muted = true;
               assets.appendChild(video);
 
-              // Create video plane
               const videoPlane = document.createElement("a-video");
               videoPlane.setAttribute("src", `#arjs-video-${index}`);
               videoPlane.setAttribute("position", "0 0 0");
@@ -184,8 +280,9 @@
                 "shader: flat; side: double;"
               );
               markerEntity.appendChild(videoPlane);
+
+              videoPlanes.push(videoPlane);
             } else {
-              // Image content
               const imagePlane = document.createElement("a-image");
               imagePlane.setAttribute("src", marker.content);
               imagePlane.setAttribute("position", "0 0 0");
@@ -197,13 +294,17 @@
                 "shader: flat; side: double;"
               );
               markerEntity.appendChild(imagePlane);
+
+              videoPlanes.push(imagePlane);
             }
 
-            // Add event listeners
             markerEntity.addEventListener("markerFound", () => {
               const hint = document.getElementById("hint");
               hint.textContent = `${marker.name} terdeteksi`;
               hint.classList.add("found");
+
+              // Show controls
+              document.getElementById("controls").style.display = "flex";
 
               if (marker.type === "video") {
                 const video = document.getElementById(`arjs-video-${index}`);
@@ -241,7 +342,6 @@
 
           document.body.appendChild(scene);
 
-          // Hide loading when ready
           setTimeout(() => {
             document.getElementById("loading").classList.add("hidden");
           }, 2000);
