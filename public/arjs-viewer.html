@@ -81,6 +81,43 @@
       const markersParam = params.get("markers");
       let markers = [];
 
+      // ✅ Device detection
+      function isMobileDevice() {
+        const ua = navigator.userAgent.toLowerCase();
+        const isMobile =
+          /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+            ua
+          );
+        const isTouchDevice =
+          "ontouchstart" in window || navigator.maxTouchPoints > 0;
+        const isSmallScreen = window.innerWidth <= 768;
+
+        return isMobile || (isTouchDevice && isSmallScreen);
+      }
+
+      // ✅ Get appropriate rotation based on device
+      function getDeviceRotation() {
+        // Check if manual rotation override in URL
+        const manualRotation = params.get("rotation");
+        if (manualRotation) {
+          console.log("Using manual rotation from URL:", manualRotation);
+          return manualRotation;
+        }
+
+        // Auto-detect device
+        if (isMobileDevice()) {
+          // Mobile/Tablet: rotation yang sudah ditest di Android
+          return "150 -180 0";
+        } else {
+          // Desktop: rotation untuk browser desktop
+          return "-75 0 0";
+        }
+      }
+
+      const deviceRotation = getDeviceRotation();
+      console.log("Device type:", isMobileDevice() ? "Mobile" : "Desktop");
+      console.log("Using rotation:", deviceRotation);
+
       if (markersParam) {
         try {
           markers = JSON.parse(decodeURIComponent(markersParam));
@@ -178,7 +215,7 @@
               videoPlane.setAttribute("position", "0 0 0");
               videoPlane.setAttribute("width", baseWidth);
               videoPlane.setAttribute("height", baseHeight);
-              videoPlane.setAttribute("rotation", "150 -180 0");
+              videoPlane.setAttribute("rotation", deviceRotation);
               videoPlane.setAttribute(
                 "material",
                 "shader: flat; side: double;"
@@ -191,7 +228,7 @@
               imagePlane.setAttribute("position", "0 0 0");
               imagePlane.setAttribute("width", baseWidth);
               imagePlane.setAttribute("height", baseHeight);
-              imagePlane.setAttribute("rotation", "150 -180 0");
+              imagePlane.setAttribute("rotation", deviceRotation);
               imagePlane.setAttribute(
                 "material",
                 "shader: flat; side: double;"
