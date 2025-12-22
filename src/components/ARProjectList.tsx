@@ -1,4 +1,4 @@
-// src/components/ARProjectList.tsx - Handle missing marker images
+// src/components/ARProjectList.tsx - Cleaned up (Analytics handled in ARProjectActions)
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,13 +50,6 @@ export const ARProjectList = ({
   }>({
     open: false,
     project: null,
-  });
-  const [analyticsModal, setAnalyticsModal] = useState<{
-    open: boolean;
-    projectId: string | null;
-  }>({
-    open: false,
-    projectId: null,
   });
 
   useEffect(() => {
@@ -236,9 +229,7 @@ export const ARProjectList = ({
                 projectName={project.name}
                 onDelete={() => fetchProjects()}
                 onDuplicate={() => fetchProjects()}
-                onAnalytics={() =>
-                  setAnalyticsModal({ open: true, projectId: project.id })
-                }
+                onEdit={() => fetchProjects()}
               />
             </div>
             <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1">

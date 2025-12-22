@@ -1,4 +1,3 @@
-// src/components/ARProjectEditForm.tsx
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,11 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Save, X, Trash2 } from "lucide-react";
+import { Loader2, Save, X, Trash2, Image, Video, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 interface Marker {
   id: string;
@@ -24,6 +24,7 @@ interface Marker {
   scale: number;
   content_url: string;
   marker_url: string;
+  library: string;
 }
 
 interface ARProjectEditFormProps {
@@ -163,163 +164,258 @@ export const ARProjectEditForm = ({
     }
   };
 
+  const getContentIcon = (type: string) => {
+    switch (type) {
+      case "video":
+        return <Video className="w-4 h-4" />;
+      case "image":
+        return <Image className="w-4 h-4" />;
+      default:
+        return <FileText className="w-4 h-4" />;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Project</DialogTitle>
-          <DialogDescription>
-            Update nama project dan konfigurasi markers
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="pb-4">
+          <DialogTitle className="text-2xl">Edit AR Project</DialogTitle>
+          <DialogDescription className="text-base">
+            Update nama project dan konfigurasi markers. Untuk mengganti file
+            marker atau content, silakan buat project baru.
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
-          <div className="py-12 text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-            <p className="mt-4 text-muted-foreground">Loading project...</p>
+          <div className="py-20 text-center">
+            <Loader2 className="w-10 h-10 animate-spin mx-auto text-primary" />
+            <p className="mt-4 text-muted-foreground">Memuat data project...</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Project Name */}
-            <div className="space-y-2">
-              <Label htmlFor="projectName">Nama Project *</Label>
-              <Input
-                id="projectName"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder="Nama project"
-                disabled={saving}
-              />
-            </div>
+          <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+            {/* Project Name Section */}
+            <Card className="border-2 shadow-sm">
+              <CardContent className="p-5">
+                <div className="space-y-3">
+                  <Label
+                    htmlFor="projectName"
+                    className="text-base font-semibold"
+                  >
+                    Nama Project <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="projectName"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="Masukkan nama project"
+                    disabled={saving}
+                    className="h-11 text-base"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-            {/* Markers */}
+            {/* Markers Section */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-base">Markers ({markers.length})</Label>
-                <Alert className="w-auto p-2">
-                  <AlertDescription className="text-xs">
-                    Untuk mengganti content/marker file, buat project baru
-                  </AlertDescription>
-                </Alert>
+                <h3 className="text-lg font-semibold">Daftar Markers</h3>
+                <Badge variant="secondary" className="text-sm">
+                  {markers.length} Marker{markers.length !== 1 ? "s" : ""}
+                </Badge>
               </div>
 
-              {markers.map((marker, index) => (
-                <Card key={marker.id} className="border-2">
-                  <CardContent className="p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">Marker {index + 1}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeMarker(marker.id)}
-                        disabled={saving || markers.length === 1}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-
-                    {/* Marker Preview */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">
-                          Marker
-                        </Label>
-                        {marker.marker_url ? (
-                          <img
-                            src={marker.marker_url}
-                            alt="Marker"
-                            className="w-full h-24 object-cover rounded border mt-1"
-                          />
-                        ) : (
-                          <div className="w-full h-24 bg-muted rounded border mt-1 flex items-center justify-center text-xs text-muted-foreground">
-                            No preview
+              <div className="space-y-4">
+                {markers.map((marker, index) => (
+                  <Card
+                    key={marker.id}
+                    className="border-2 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <CardContent className="p-5">
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
+                            {index + 1}
                           </div>
-                        )}
+                          <div>
+                            <h4 className="font-semibold">
+                              Marker {index + 1}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                {getContentIcon(marker.content_type)}
+                                <span className="ml-1 capitalize">
+                                  {marker.content_type}
+                                </span>
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {marker.library}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeMarker(marker.id)}
+                          disabled={saving || markers.length === 1}
+                          className="hover:bg-destructive/10 hover:text-destructive"
+                          title={
+                            markers.length === 1
+                              ? "Minimal 1 marker harus ada"
+                              : "Hapus marker"
+                          }
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">
-                          Content
-                        </Label>
-                        {marker.content_type === "video" ? (
-                          <video
-                            src={marker.content_url}
-                            className="w-full h-24 object-cover rounded border mt-1"
-                            muted
+
+                      <Separator className="my-4" />
+
+                      {/* Preview Section */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium flex items-center gap-2">
+                            <Image className="w-4 h-4" />
+                            Marker Image
+                          </Label>
+                          {marker.marker_url ? (
+                            <div className="relative group">
+                              <img
+                                src={marker.marker_url}
+                                alt="Marker"
+                                className="w-full h-40 object-contain bg-gradient-to-br from-muted to-muted/50 rounded-lg border-2 p-2"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                <span className="text-white text-xs">
+                                  Preview Marker
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-full h-40 bg-muted rounded-lg border-2 border-dashed flex items-center justify-center">
+                              <span className="text-sm text-muted-foreground">
+                                No preview available
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium flex items-center gap-2">
+                            {getContentIcon(marker.content_type)}
+                            AR Content
+                          </Label>
+                          <div className="relative group">
+                            {marker.content_type === "video" ? (
+                              <video
+                                src={marker.content_url}
+                                className="w-full h-40 object-contain bg-gradient-to-br from-muted to-muted/50 rounded-lg border-2 p-2"
+                                muted
+                                loop
+                                onMouseEnter={(e) => e.currentTarget.play()}
+                                onMouseLeave={(e) => e.currentTarget.pause()}
+                              />
+                            ) : (
+                              <img
+                                src={marker.content_url}
+                                alt="Content"
+                                className="w-full h-40 object-contain bg-gradient-to-br from-muted to-muted/50 rounded-lg border-2 p-2"
+                              />
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                              <span className="text-white text-xs">
+                                Preview Content
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Editable Fields */}
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor={`marker-name-${index}`}
+                            className="text-sm font-medium"
+                          >
+                            Nama Marker
+                          </Label>
+                          <Input
+                            id={`marker-name-${index}`}
+                            value={marker.name}
+                            onChange={(e) =>
+                              updateMarker(index, { name: e.target.value })
+                            }
+                            disabled={saving}
+                            placeholder="Beri nama marker"
+                            className="h-10"
                           />
-                        ) : (
-                          <img
-                            src={marker.content_url}
-                            alt="Content"
-                            className="w-full h-24 object-cover rounded border mt-1"
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-sm font-medium">
+                              Ukuran Content
+                            </Label>
+                            <Badge variant="secondary" className="font-mono">
+                              {marker.scale.toFixed(1)}x
+                            </Badge>
+                          </div>
+                          <Slider
+                            value={[marker.scale]}
+                            onValueChange={(val) =>
+                              updateMarker(index, { scale: val[0] })
+                            }
+                            min={0.5}
+                            max={3}
+                            step={0.1}
+                            disabled={saving}
+                            className="py-2"
                           />
-                        )}
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>0.5x (Kecil)</span>
+                            <span>1.5x (Normal)</span>
+                            <span>3.0x (Besar)</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Editable Fields */}
-                    <div className="space-y-2">
-                      <Label>Nama Marker</Label>
-                      <Input
-                        value={marker.name}
-                        onChange={(e) =>
-                          updateMarker(index, { name: e.target.value })
-                        }
-                        disabled={saving}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <Label>Ukuran {marker.scale.toFixed(1)}x</Label>
-                      </div>
-                      <Slider
-                        value={[marker.scale]}
-                        onValueChange={(val) =>
-                          updateMarker(index, { scale: val[0] })
-                        }
-                        min={0.5}
-                        max={3}
-                        step={0.1}
-                        disabled={saving}
-                      />
-                    </div>
-
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <div>Type: {marker.content_type}</div>
-                      <div className="truncate">
-                        Content: {marker.content_url}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
+          </div>
+        )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-4 border-t">
-              <Button
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={saving}
-                className="flex-1"
-              >
-                <X className="w-4 h-4 mr-2" />
-                Batal
-              </Button>
-              <Button onClick={handleSave} disabled={saving} className="flex-1">
-                {saving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Simpan
-                  </>
-                )}
-              </Button>
-            </div>
+        {/* Action Buttons - Sticky Footer */}
+        {!loading && (
+          <div className="flex gap-3 pt-6 border-t mt-6">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+              className="flex-1 h-11"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Batal
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 h-11"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Simpan Perubahan
+                </>
+              )}
+            </Button>
           </div>
         )}
       </DialogContent>

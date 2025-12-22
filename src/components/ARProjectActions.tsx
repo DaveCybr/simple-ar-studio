@@ -1,4 +1,4 @@
-// src/components/ARProjectActions.tsx
+// src/components/ARProjectActions.tsx - FIXED with Analytics Dialog
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -17,6 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   MoreVertical,
@@ -29,13 +35,13 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ARProjectEditForm } from "./ARProjectEditForm";
+import { ARAnalyticsDashboard } from "./ARAnalyticsDashboard";
 
 interface ARProjectActionsProps {
   projectId: string;
   projectName: string;
   onEdit?: () => void;
   onDelete?: () => void;
-  onAnalytics?: () => void;
   onDuplicate?: () => void;
 }
 
@@ -44,11 +50,11 @@ export const ARProjectActions = ({
   projectName,
   onEdit,
   onDelete,
-  onAnalytics,
   onDuplicate,
 }: ARProjectActionsProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
@@ -158,7 +164,7 @@ export const ARProjectActions = ({
   };
 
   const handleExportQR = () => {
-    const url = `${window.location.origin}/ar/${projectId}`;
+    const url = `${window.location.origin}/view/${projectId}`;
     window.open(
       `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(
         url
@@ -180,7 +186,7 @@ export const ARProjectActions = ({
             <Edit className="mr-2 h-4 w-4" />
             Edit Project
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onAnalytics}>
+          <DropdownMenuItem onClick={() => setAnalyticsDialogOpen(true)}>
             <BarChart3 className="mr-2 h-4 w-4" />
             Analytics
           </DropdownMenuItem>
@@ -212,6 +218,16 @@ export const ARProjectActions = ({
           onEdit?.();
         }}
       />
+
+      {/* Analytics Dialog */}
+      <Dialog open={analyticsDialogOpen} onOpenChange={setAnalyticsDialogOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Analytics - {projectName}</DialogTitle>
+          </DialogHeader>
+          <ARAnalyticsDashboard projectId={projectId} />
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
