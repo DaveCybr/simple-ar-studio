@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeModal } from "./QRCodeModal";
+import { ARProjectActions } from "./ARProjectActions";
 
 interface ARProject {
   id: string;
@@ -49,6 +50,13 @@ export const ARProjectList = ({
   }>({
     open: false,
     project: null,
+  });
+  const [analyticsModal, setAnalyticsModal] = useState<{
+    open: boolean;
+    projectId: string | null;
+  }>({
+    open: false,
+    projectId: null,
   });
 
   useEffect(() => {
@@ -221,7 +229,18 @@ export const ARProjectList = ({
           </div>
 
           <CardContent className="p-4">
-            <h3 className="font-semibold mb-2 truncate">{project.name}</h3>
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="font-semibold truncate flex-1">{project.name}</h3>
+              <ARProjectActions
+                projectId={project.id}
+                projectName={project.name}
+                onDelete={() => fetchProjects()}
+                onDuplicate={() => fetchProjects()}
+                onAnalytics={() =>
+                  setAnalyticsModal({ open: true, projectId: project.id })
+                }
+              />
+            </div>
             <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               {new Date(project.created_at).toLocaleDateString("id-ID")}

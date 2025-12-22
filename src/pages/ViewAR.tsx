@@ -3,8 +3,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, AlertCircle, Home, Scan, QrCode } from "lucide-react";
+import { Loader2, AlertCircle, Home } from "lucide-react";
 
 interface ARMarker {
   id: string;
