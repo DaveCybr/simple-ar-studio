@@ -199,26 +199,6 @@ export const ARProjectList = ({
                 <Layers className="w-8 h-8 text-muted-foreground" />
               </div>
             )}
-
-            {/* Library badge */}
-            <Badge className="absolute top-2 left-2" variant="secondary">
-              {project.library === "mindar" ? (
-                <>
-                  <Scan className="w-3 h-3 mr-1" />
-                  MindAR
-                </>
-              ) : (
-                <>
-                  <QrCode className="w-3 h-3 mr-1" />
-                  AR.js
-                </>
-              )}
-            </Badge>
-
-            <Badge className="absolute top-2 right-2" variant="secondary">
-              <Layers className="w-3 h-3 mr-1" />
-              {project.marker_count} Marker
-            </Badge>
           </div>
 
           <CardContent className="p-4">

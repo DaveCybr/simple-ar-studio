@@ -192,9 +192,9 @@ export const ARJSPatternGenerator = ({ onPatternGenerated }) => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Generate AR.js Pattern Marker</CardTitle>
+        <CardTitle>Generate Marker</CardTitle>
         <CardDescription>
-          Upload gambar untuk membuat pattern marker AR.js
+          Upload gambar untuk membuat pattern marker
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -373,7 +373,7 @@ export const PatternGeneratorButton = ({ onPatternGenerated, disabled }) => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>AR.js Pattern Generator</DialogTitle>
+            <DialogTitle>Marker Generator</DialogTitle>
           </DialogHeader>
           <ARJSPatternGenerator onPatternGenerated={handleGenerated} />
         </DialogContent>
