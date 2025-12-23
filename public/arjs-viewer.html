@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR.js Viewer - Rotation Test</title>
+    <title>Nano AR Viewer</title>
     <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -47,7 +47,7 @@
       }
       .hint {
         position: fixed;
-        bottom: 80px;
+        bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
         background: rgba(0, 0, 0, 0.6);
@@ -65,54 +65,6 @@
       .hint.found {
         background: rgba(34, 197, 94, 0.6);
       }
-
-      /* Rotation Controls */
-      .controls {
-        position: fixed;
-        bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.9);
-        padding: 12px;
-        border-radius: 12px;
-        z-index: 100;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-family: system-ui, -apple-system, sans-serif;
-        min-width: 300px;
-      }
-      .controls button {
-        background: #3b82f6;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 12px;
-        cursor: pointer;
-        font-weight: 600;
-      }
-      .controls button:active {
-        background: #2563eb;
-      }
-      .rotation-display {
-        color: #22c55e;
-        font-size: 11px;
-        font-weight: 600;
-        text-align: center;
-        background: rgba(34, 197, 94, 0.1);
-        padding: 6px;
-        border-radius: 6px;
-      }
-      .preset-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-      }
-      .preset-grid button {
-        font-size: 10px;
-        padding: 6px;
-      }
     </style>
   </head>
   <body>
@@ -123,42 +75,122 @@
 
     <div class="hint" id="hint">Arahkan kamera ke marker</div>
 
-    <div class="controls" id="controls" style="display: none">
-      <div class="rotation-display" id="rotationDisplay">
-        Rotation: 0° 0° 0°
-      </div>
-
-      <div
-        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px"
-      >
-        <button onclick="adjustRotation('x', -15)">X -15°</button>
-        <button onclick="adjustRotation('y', -15)">Y -15°</button>
-        <button onclick="adjustRotation('z', -15)">Z -15°</button>
-        <button onclick="adjustRotation('x', 15)">X +15°</button>
-        <button onclick="adjustRotation('y', 15)">Y +15°</button>
-        <button onclick="adjustRotation('z', 15)">Z +15°</button>
-      </div>
-
-      <div class="preset-grid">
-        <button onclick="setRotation(0, 0, 0)">Flat (0,0,0)</button>
-        <button onclick="setRotation(-90, 0, 0)">X-90</button>
-        <button onclick="setRotation(0, -90, 0)">Y-90</button>
-        <button onclick="setRotation(0, 0, -90)">Z-90</button>
-        <button onclick="setRotation(90, 0, 0)">X+90</button>
-        <button onclick="setRotation(0, 180, 0)">Y+180</button>
-      </div>
-
-      <button onclick="resetRotation()" style="background: #ef4444">
-        Reset
-      </button>
-    </div>
-
     <script>
       const params = new URLSearchParams(window.location.search);
       const markersParam = params.get("markers");
+      const projectId = params.get("projectId");
       let markers = [];
-      let currentRotation = { x: 0, y: 0, z: 0 };
-      let videoPlanes = [];
+
+      // Analytics Tracking Class
+      class ARAnalytics {
+        constructor(projectId) {
+          this.projectId = projectId;
+          this.sessionId = `${Date.now()}-${Math.random()
+            .toString(36)
+            .substr(2, 9)}`;
+          this.sessionStart = Date.now();
+          this.scanCount = 0;
+          this.markerTimes = {};
+          this.deviceType = this.detectDevice();
+        }
+
+        detectDevice() {
+          const ua = navigator.userAgent.toLowerCase();
+          if (/tablet|ipad/i.test(ua)) return "tablet";
+          if (/mobile|android|iphone/i.test(ua)) return "mobile";
+          return "desktop";
+        }
+
+        async trackEvent(eventType, data = {}) {
+          try {
+            // Send to your backend API
+            await fetch("/api/analytics", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                project_id: this.projectId,
+                session_id: this.sessionId,
+                event_type: eventType,
+                device_type: this.deviceType,
+                user_agent: navigator.userAgent,
+                ...data,
+              }),
+            });
+          } catch (error) {
+            console.error("Analytics error:", error);
+          }
+        }
+
+        trackView() {
+          this.trackEvent("view");
+        }
+
+        trackScan(markerName) {
+          this.scanCount++;
+          this.markerTimes[markerName] = Date.now();
+          this.trackEvent("scan", { marker_name: markerName });
+        }
+
+        trackMarkerLost(markerName) {
+          if (this.markerTimes[markerName]) {
+            const duration = Math.floor(
+              (Date.now() - this.markerTimes[markerName]) / 1000
+            );
+            this.trackEvent("marker_lost", {
+              marker_name: markerName,
+              duration,
+            });
+            delete this.markerTimes[markerName];
+          }
+        }
+
+        trackSessionEnd() {
+          const duration = Math.floor((Date.now() - this.sessionStart) / 1000);
+          this.trackEvent("session_end", {
+            duration,
+            total_scans: this.scanCount,
+          });
+        }
+
+        init() {
+          this.trackView();
+
+          window.addEventListener("beforeunload", () => {
+            this.trackSessionEnd();
+          });
+
+          document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+              this.trackSessionEnd();
+            }
+          });
+        }
+      }
+
+      // Initialize Analytics
+      const analytics = projectId ? new ARAnalytics(projectId) : null;
+      if (analytics) analytics.init();
+
+      // Device detection for rotation
+      function isMobileDevice() {
+        const ua = navigator.userAgent.toLowerCase();
+        const isMobile =
+          /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+            ua
+          );
+        const isTouchDevice =
+          "ontouchstart" in window || navigator.maxTouchPoints > 0;
+        const isSmallScreen = window.innerWidth <= 768;
+        return isMobile || (isTouchDevice && isSmallScreen);
+      }
+
+      function getDeviceRotation() {
+        const manualRotation = params.get("rotation");
+        if (manualRotation) return manualRotation;
+        return isMobileDevice() ? "150 0 0" : "-75 0 0";
+      }
+
+      const deviceRotation = getDeviceRotation();
 
       if (markersParam) {
         try {
@@ -166,31 +198,6 @@
         } catch (e) {
           console.error("Parse error:", e);
         }
-      }
-
-      function adjustRotation(axis, amount) {
-        currentRotation[axis] += amount;
-        updateAllRotations();
-      }
-
-      function setRotation(x, y, z) {
-        currentRotation = { x, y, z };
-        updateAllRotations();
-      }
-
-      function resetRotation() {
-        currentRotation = { x: 0, y: 0, z: 0 };
-        updateAllRotations();
-      }
-
-      function updateAllRotations() {
-        const rotString = `${currentRotation.x} ${currentRotation.y} ${currentRotation.z}`;
-        videoPlanes.forEach((plane) => {
-          plane.setAttribute("rotation", rotString);
-        });
-        document.getElementById(
-          "rotationDisplay"
-        ).textContent = `Rotation: ${currentRotation.x}° ${currentRotation.y}° ${currentRotation.z}°`;
       }
 
       if (markers.length === 0) {
@@ -274,28 +281,24 @@
               videoPlane.setAttribute("position", "0 0 0");
               videoPlane.setAttribute("width", baseWidth);
               videoPlane.setAttribute("height", baseHeight);
-              videoPlane.setAttribute("rotation", "0 0 0");
+              videoPlane.setAttribute("rotation", deviceRotation);
               videoPlane.setAttribute(
                 "material",
                 "shader: flat; side: double;"
               );
               markerEntity.appendChild(videoPlane);
-
-              videoPlanes.push(videoPlane);
             } else {
               const imagePlane = document.createElement("a-image");
               imagePlane.setAttribute("src", marker.content);
               imagePlane.setAttribute("position", "0 0 0");
               imagePlane.setAttribute("width", baseWidth);
               imagePlane.setAttribute("height", baseHeight);
-              imagePlane.setAttribute("rotation", "0 0 0");
+              imagePlane.setAttribute("rotation", deviceRotation);
               imagePlane.setAttribute(
                 "material",
                 "shader: flat; side: double;"
               );
               markerEntity.appendChild(imagePlane);
-
-              videoPlanes.push(imagePlane);
             }
 
             markerEntity.addEventListener("markerFound", () => {
@@ -303,8 +306,8 @@
               hint.textContent = `${marker.name} terdeteksi`;
               hint.classList.add("found");
 
-              // Show controls
-              document.getElementById("controls").style.display = "flex";
+              // Track scan
+              if (analytics) analytics.trackScan(marker.name);
 
               if (marker.type === "video") {
                 const video = document.getElementById(`arjs-video-${index}`);
@@ -326,6 +329,9 @@
               const hint = document.getElementById("hint");
               hint.textContent = "Arahkan kamera ke marker";
               hint.classList.remove("found");
+
+              // Track marker lost
+              if (analytics) analytics.trackMarkerLost(marker.name);
 
               if (marker.type === "video") {
                 const video = document.getElementById(`arjs-video-${index}`);
