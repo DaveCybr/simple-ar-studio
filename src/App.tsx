@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Pricing from "./pages/Pricing";
 import ViewAR from "./pages/ViewAR";
 import NotFound from "./pages/NotFound";
+import ARMarkerGenerator from "./pages/Compiler";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/generator" element={<ARMarkerGenerator />} />
             <Route path="/view/:id" element={<ViewAR />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
