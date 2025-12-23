@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nano AR Viewer</title>
+    <title>AR.js Viewer</title>
     <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -187,7 +187,7 @@
       function getDeviceRotation() {
         const manualRotation = params.get("rotation");
         if (manualRotation) return manualRotation;
-        return isMobileDevice() ? "150 0 0" : "-75 0 0";
+        return isMobileDevice() ? "0 -180 0" : "-75 0 0";
       }
 
       const deviceRotation = getDeviceRotation();
