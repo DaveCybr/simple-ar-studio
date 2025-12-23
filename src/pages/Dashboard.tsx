@@ -23,7 +23,7 @@ import {
   Crown,
   Loader2,
 } from "lucide-react";
-import { ARProjectFormDual } from "@/components/ARProjectForm";
+import { ARProjectForm } from "@/components/ARProjectForm";
 
 interface Profile {
   id: string;
@@ -224,7 +224,7 @@ const Dashboard = () => {
 
           <TabsContent value="upload" className="flex justify-center">
             {canUpload ? (
-              <ARProjectFormDual
+              <ARProjectForm
                 onSuccess={handleUploadSuccess}
                 maxMarkers={maxMarkers}
               />

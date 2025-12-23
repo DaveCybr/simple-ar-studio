@@ -1,4 +1,3 @@
-// src/components/ARProjectForm.tsx - FIXED with marker image upload for AR.js
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,67 +21,63 @@ import {
   Image,
   CheckCircle,
   Scan,
-  QrCode,
   Info,
-  ImageIcon,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Slider } from "@/components/ui/slider";
-import type { ARLibrary, MindARMarker, ARJSMarker } from "@/types/ar";
+import { PatternGeneratorButton } from "./ARProjectPatternGenerator";
+import { Badge } from "@/components/ui/badge";
 
-interface ARProjectFormDualProps {
+interface Marker {
+  id: string;
+  name: string;
+  contentFile: File | null;
+  contentType: "video" | "image";
+  scale: number;
+  patternFile: File | null;
+  markerType: "pattern" | "barcode" | "hiro" | "kanji";
+  barcodeValue?: number;
+  markerImageFile: File | null;
+}
+
+interface ARProjectFormProps {
   onSuccess?: () => void;
   maxMarkers?: number;
 }
 
-export const ARProjectFormDual = ({
+export const ARProjectForm = ({
   onSuccess,
   maxMarkers = 3,
-}: ARProjectFormDualProps) => {
+}: ARProjectFormProps) => {
   const { user } = useAuth();
   const [projectName, setProjectName] = useState("");
-  const [arLibrary, setARLibrary] = useState<ARLibrary>("mindar");
-  const [markers, setMarkers] = useState<(MindARMarker | ARJSMarker)[]>([]);
-  const [mindFile, setMindFile] = useState<File | null>(null);
+  const [markers, setMarkers] = useState<Marker[]>([createEmptyMarker()]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState("");
+  const [expandedMarkers, setExpandedMarkers] = useState<Set<string>>(
+    new Set([markers[0]?.id])
+  );
   const { toast } = useToast();
 
-  const createEmptyMarker = (): MindARMarker | ARJSMarker => {
-    const baseMarker = {
+  function createEmptyMarker(): Marker {
+    return {
       id: crypto.randomUUID(),
       name: "",
       contentFile: null,
-      contentType: "video" as const,
+      contentType: "video",
       scale: 1.0,
+      patternFile: null,
+      markerType: "pattern",
+      markerImageFile: null,
     };
-
-    if (arLibrary === "mindar") {
-      return {
-        ...baseMarker,
-        library: "mindar",
-        markerFile: null,
-        mindFile: null,
-      } as MindARMarker;
-    } else {
-      return {
-        ...baseMarker,
-        library: "arjs",
-        patternFile: null,
-        markerType: "pattern",
-        markerImageFile: null, // ✅ NEW: For preview in project list
-      } as ARJSMarker;
-    }
-  };
-
-  const handleLibraryChange = (library: ARLibrary) => {
-    setARLibrary(library);
-    setMarkers([createEmptyMarker()]);
-    setMindFile(null);
-  };
+  }
 
   const addMarker = () => {
     if (markers.length >= maxMarkers) {
@@ -93,21 +88,53 @@ export const ARProjectFormDual = ({
       });
       return;
     }
-    setMarkers([...markers, createEmptyMarker()]);
+    const newMarker = createEmptyMarker();
+    setMarkers([...markers, newMarker]);
+    setExpandedMarkers(new Set([...expandedMarkers, newMarker.id]));
   };
 
   const removeMarker = (index: number) => {
     if (markers.length <= 1) return;
-    setMarkers(markers.filter((_, i) => i !== index));
+    const newMarkers = markers.filter((_, i) => i !== index);
+    setMarkers(newMarkers);
+    const newExpanded = new Set(expandedMarkers);
+    newExpanded.delete(markers[index].id);
+    setExpandedMarkers(newExpanded);
   };
 
-  const updateMarker = (
-    index: number,
-    updated: Partial<MindARMarker | ARJSMarker>
-  ) => {
+  const toggleMarkerExpanded = (id: string) => {
+    const newExpanded = new Set(expandedMarkers);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedMarkers(newExpanded);
+  };
+
+  const updateMarker = (index: number, updated: Partial<Marker>) => {
     const newMarkers = [...markers];
     newMarkers[index] = { ...newMarkers[index], ...updated };
     setMarkers(newMarkers);
+  };
+
+  const isMarkerComplete = (marker: Marker): boolean => {
+    if (!marker.name || !marker.contentFile) return false;
+    if (marker.markerType === "pattern") {
+      return !!marker.patternFile;
+    }
+    return true;
+  };
+
+  const isStepComplete = (step: number): boolean => {
+    switch (step) {
+      case 1:
+        return !!projectName.trim();
+      case 2:
+        return markers.length > 0 && markers.every(isMarkerComplete);
+      default:
+        return false;
+    }
   };
 
   const uploadToCloudinary = async (
@@ -148,15 +175,6 @@ export const ARProjectFormDual = ({
       return false;
     }
 
-    if (arLibrary === "mindar" && markers.length > 1 && !mindFile) {
-      toast({
-        title: "Error",
-        description: "Multi-target MindAR memerlukan file .mind",
-        variant: "destructive",
-      });
-      return false;
-    }
-
     for (let i = 0; i < markers.length; i++) {
       const m = markers[i];
       if (!m.name || !m.contentFile) {
@@ -168,26 +186,13 @@ export const ARProjectFormDual = ({
         return false;
       }
 
-      if (arLibrary === "mindar") {
-        const mindMarker = m as MindARMarker;
-        if (!mindMarker.markerFile && markers.length === 1) {
-          toast({
-            title: "Error",
-            description: `Marker ${i + 1} memerlukan marker image`,
-            variant: "destructive",
-          });
-          return false;
-        }
-      } else {
-        const arjsMarker = m as ARJSMarker;
-        if (arjsMarker.markerType === "pattern" && !arjsMarker.patternFile) {
-          toast({
-            title: "Error",
-            description: `Marker ${i + 1} memerlukan pattern file`,
-            variant: "destructive",
-          });
-          return false;
-        }
+      if (m.markerType === "pattern" && !m.patternFile) {
+        toast({
+          title: "Error",
+          description: `Marker ${i + 1} memerlukan pattern file`,
+          variant: "destructive",
+        });
+        return false;
       }
     }
     return true;
@@ -205,19 +210,12 @@ export const ARProjectFormDual = ({
 
       const { data: projectData, error: projectError } = await supabase
         .from("ar_projects")
-        .insert({ name: projectName, user_id: user?.id, library: arLibrary })
+        .insert({ name: projectName, user_id: user?.id, library: "arjs" })
         .select()
         .single();
 
       if (projectError) throw projectError;
       const projectId = projectData.id;
-
-      let mindUrl = null;
-      if (arLibrary === "mindar" && mindFile) {
-        setCurrentStep("Uploading .mind file...");
-        setUploadProgress(20);
-        mindUrl = await uploadToCloudinary(mindFile, "raw", "ar-mind-files");
-      }
 
       const totalSteps = markers.length * 3;
       let currentStepNum = 0;
@@ -226,75 +224,41 @@ export const ARProjectFormDual = ({
         const marker = markers[i];
 
         let markerUrl = "";
-        let markerData: Record<string, any> = {};
+        let markerData: Record<string, any> = {
+          library: "arjs",
+          markerType: marker.markerType,
+        };
 
-        if (arLibrary === "mindar") {
-          const mindMarker = marker as MindARMarker;
-
-          setCurrentStep(`Marker ${i + 1}: Uploading marker image...`);
+        if (marker.markerImageFile) {
+          setCurrentStep(`Marker ${i + 1}: Uploading marker preview...`);
           currentStepNum++;
           setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
 
-          if (mindMarker.markerFile) {
-            markerUrl = await uploadToCloudinary(
-              mindMarker.markerFile,
-              "image",
-              "ar-markers"
-            );
-          }
+          markerUrl = await uploadToCloudinary(
+            marker.markerImageFile,
+            "image",
+            "ar-markers"
+          );
+        }
 
-          markerData = {
-            library: "mindar",
-            mindUrl:
-              mindUrl ||
-              (mindMarker.mindFile
-                ? await uploadToCloudinary(
-                    mindMarker.mindFile,
-                    "raw",
-                    "ar-mind-files"
-                  )
-                : null),
-          };
-        } else {
-          const arjsMarker = marker as ARJSMarker;
+        setCurrentStep(`Marker ${i + 1}: Processing pattern...`);
+        currentStepNum++;
+        setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
 
-          // ✅ NEW: Upload marker image for preview (optional but recommended)
-          if (arjsMarker.markerImageFile) {
-            setCurrentStep(`Marker ${i + 1}: Uploading marker preview...`);
-            currentStepNum++;
-            setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
-
-            markerUrl = await uploadToCloudinary(
-              arjsMarker.markerImageFile,
-              "image",
-              "ar-markers"
-            );
-          }
-
-          setCurrentStep(`Marker ${i + 1}: Processing pattern...`);
-          currentStepNum++;
-          setUploadProgress(20 + (currentStepNum / totalSteps) * 60);
-
-          markerData = {
-            library: "arjs",
-            markerType: arjsMarker.markerType,
-          };
-
-          if (arjsMarker.markerType === "pattern" && arjsMarker.patternFile) {
-            const patternUrl = await uploadToCloudinary(
-              arjsMarker.patternFile,
-              "raw",
-              "ar-patterns"
-            );
-            markerData.patternUrl = patternUrl;
-          } else if (arjsMarker.markerType === "barcode") {
-            markerData.barcodeValue = arjsMarker.barcodeValue || 0;
-          } else if (
-            arjsMarker.markerType === "hiro" ||
-            arjsMarker.markerType === "kanji"
-          ) {
-            markerData.preset = arjsMarker.markerType;
-          }
+        if (marker.markerType === "pattern" && marker.patternFile) {
+          const patternUrl = await uploadToCloudinary(
+            marker.patternFile,
+            "raw",
+            "ar-patterns"
+          );
+          markerData.patternUrl = patternUrl;
+        } else if (marker.markerType === "barcode") {
+          markerData.barcodeValue = marker.barcodeValue || 0;
+        } else if (
+          marker.markerType === "hiro" ||
+          marker.markerType === "kanji"
+        ) {
+          markerData.preset = marker.markerType;
         }
 
         setCurrentStep(`Marker ${i + 1}: Uploading content...`);
@@ -313,8 +277,8 @@ export const ARProjectFormDual = ({
 
         const { error: dbError } = await supabase.from("ar_content").insert({
           name: marker.name,
-          library: arLibrary,
-          marker_url: markerUrl || null, // ✅ Can be null if no image uploaded
+          library: "arjs",
+          marker_url: markerUrl || null,
           marker_data: markerData,
           content_url: contentUrl,
           content_type: marker.contentType,
@@ -332,14 +296,11 @@ export const ARProjectFormDual = ({
       setUploadProgress(100);
       toast({
         title: "Berhasil!",
-        description: `Project "${projectName}" dengan ${
-          markers.length
-        } marker (${arLibrary.toUpperCase()}) berhasil dibuat`,
+        description: `Project "${projectName}" dengan ${markers.length} marker berhasil dibuat`,
       });
 
       setProjectName("");
       setMarkers([createEmptyMarker()]);
-      setMindFile(null);
       onSuccess?.();
     } catch (error: any) {
       console.error("Upload error:", error);
@@ -355,401 +316,512 @@ export const ARProjectFormDual = ({
     }
   };
 
+  const getFilePreview = (file: File | null) => {
+    if (!file) return null;
+    if (file.type.startsWith("image/")) {
+      return URL.createObjectURL(file);
+    }
+    return null;
+  };
+
+  const markerTypes = [
+    {
+      value: "pattern",
+      label: "Custom Pattern",
+      icon: Sparkles,
+      desc: "Upload gambar khusus",
+    },
+    {
+      value: "barcode",
+      label: "Barcode",
+      icon: Scan,
+      desc: "Gunakan barcode 0-63",
+    },
+    {
+      value: "hiro",
+      label: "Hiro",
+      icon: Image,
+      desc: "Marker default",
+    },
+    {
+      value: "kanji",
+      label: "Kanji",
+      icon: Image,
+      desc: "Marker kanji",
+    },
+  ];
+
   return (
-    <Card className="w-full max-w-2xl">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Scan className="w-5 h-5 text-primary" />
-          Buat Project AR Baru
-        </CardTitle>
-        <CardDescription>
-          Pilih library AR dan buat marker sesuai kebutuhan
-        </CardDescription>
+    <Card className="w-full max-w-4xl shadow-lg">
+      <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Scan className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl">Buat Project AR Baru</CardTitle>
+              <CardDescription>
+                Buat pengalaman augmented reality yang interaktif
+              </CardDescription>
+            </div>
+          </div>
+          <Badge variant="secondary" className="text-xs">
+            {markers.length}/{maxMarkers} Markers
+          </Badge>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-6">
+
+      <CardContent className="p-6 space-y-8">
+        <div className="flex items-center justify-between mb-8">
+          {[1, 2].map((step) => (
+            <div key={step} className="flex items-center flex-1">
+              <div className="flex flex-col items-center flex-1">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
+                    isStepComplete(step)
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {isStepComplete(step) ? <Check className="w-5 h-5" /> : step}
+                </div>
+                <span className="text-xs mt-2 text-center font-medium">
+                  {step === 1 && "Informasi Project"}
+                  {step === 2 && "Konfigurasi Markers"}
+                </span>
+              </div>
+              {step < 2 && (
+                <div
+                  className={`h-1 flex-1 mx-2 rounded transition-all ${
+                    isStepComplete(step) ? "bg-primary" : "bg-muted"
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
         {uploading && (
-          <Alert>
+          <Alert className="border-primary bg-primary/5">
             <Loader2 className="h-4 w-4 animate-spin" />
             <AlertDescription>
-              <div className="space-y-2">
-                <p className="font-medium">{currentStep}</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">{currentStep}</p>
+                  <span className="text-sm font-semibold">
+                    {uploadProgress}%
+                  </span>
+                </div>
                 <Progress value={uploadProgress} className="h-2" />
               </div>
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Library Selection */}
-        <div className="space-y-3">
-          <Label className="text-base">Pilih AR Library</Label>
-          <RadioGroup
-            value={arLibrary}
-            onValueChange={handleLibraryChange}
-            disabled={uploading}
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <Card
-                className={`cursor-pointer transition-all ${
-                  arLibrary === "mindar" ? "border-primary bg-primary/5" : ""
-                }`}
-              >
-                <CardContent
-                  className="p-4 flex items-start gap-3"
-                  onClick={() => !uploading && handleLibraryChange("mindar")}
-                >
-                  <RadioGroupItem value="mindar" id="mindar" />
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="mindar"
-                      className="cursor-pointer font-semibold"
-                    >
-                      MindAR.js
-                    </Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Image tracking, support gambar kompleks
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card
-                className={`cursor-pointer transition-all ${
-                  arLibrary === "arjs" ? "border-primary bg-primary/5" : ""
-                }`}
-              >
-                <CardContent
-                  className="p-4 flex items-start gap-3"
-                  onClick={() => !uploading && handleLibraryChange("arjs")}
-                >
-                  <RadioGroupItem value="arjs" id="arjs" />
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="arjs"
-                      className="cursor-pointer font-semibold"
-                    >
-                      AR.js
-                    </Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Pattern/Barcode, lebih cepat & ringan
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                isStepComplete(1) ? "bg-primary text-white" : "bg-muted"
+              }`}
+            >
+              1
             </div>
-          </RadioGroup>
-
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              {arLibrary === "mindar" ? (
-                <div className="space-y-1">
-                  <p>
-                    <strong>MindAR.js:</strong> Cocok untuk poster, brosur, atau
-                    gambar kompleks.
-                  </p>
-                  <p>
-                    Perlu compile marker image ke .mind file di{" "}
-                    <a
-                      href="https://hiukim.github.io/mind-ar-js-doc/tools/compile/"
-                      target="_blank"
-                      className="text-primary underline"
-                    >
-                      MindAR Compiler
-                    </a>
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <p>
-                    <strong>AR.js:</strong> Cocok untuk QR code, barcode, atau
-                    pattern sederhana.
-                  </p>
-                  <p>
-                    Generate pattern di{" "}
-                    <a
-                      href="https://jeromeetienne.github.io/AR.js/three.js/examples/marker-training/examples/generator.html"
-                      target="_blank"
-                      className="text-primary underline"
-                    >
-                      AR.js Generator
-                    </a>
-                  </p>
-                </div>
-              )}
-            </AlertDescription>
-          </Alert>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="projectName">Nama Project *</Label>
-          <Input
-            id="projectName"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            placeholder="Contoh: Buku Cerita Anak"
-            disabled={uploading}
-          />
-        </div>
-
-        {arLibrary === "mindar" && markers.length > 1 && (
-          <div className="space-y-2">
-            <Label htmlFor="mindFile">Combined .mind File *</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="mindFile"
-                type="file"
-                accept=".mind"
-                onChange={(e) => setMindFile(e.target.files?.[0] || null)}
-                disabled={uploading}
-              />
-              {mindFile && <CheckCircle className="w-5 h-5 text-green-500" />}
-            </div>
+            <Label className="text-lg font-semibold">Nama Project</Label>
           </div>
-        )}
 
-        {/* Markers */}
+          <div className="relative">
+            <Input
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="Contoh: Buku Cerita Anak AR"
+              disabled={uploading}
+              className="pr-10 h-12 text-base"
+            />
+            {projectName && (
+              <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+            )}
+          </div>
+        </div>
+
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <Label className="text-base">
-              Markers ({markers.length}/{maxMarkers})
-            </Label>
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  isStepComplete(2) ? "bg-primary text-white" : "bg-muted"
+                }`}
+              >
+                2
+              </div>
+              <Label className="text-lg font-semibold">
+                Konfigurasi Markers
+              </Label>
+            </div>
+
             <Button
               variant="outline"
               size="sm"
               onClick={addMarker}
               disabled={uploading || markers.length >= maxMarkers}
+              className="gap-2"
             >
-              <Plus className="w-4 h-4 mr-1" /> Tambah
+              <Plus className="w-4 h-4" />
+              Tambah Marker
             </Button>
           </div>
 
-          {markers.map((marker, index) => (
-            <Card key={marker.id} className="border-2 border-dashed">
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">Marker {index + 1}</span>
-                  {markers.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeMarker(index)}
-                      disabled={uploading}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              Marker adalah gambar atau pola yang akan dideteksi kamera untuk
+              menampilkan konten AR. Anda bisa menggunakan custom pattern,
+              barcode, atau preset marker.
+            </AlertDescription>
+          </Alert>
 
-                <div className="space-y-2">
-                  <Label>Nama *</Label>
-                  <Input
-                    value={marker.name}
-                    onChange={(e) =>
-                      updateMarker(index, { name: e.target.value })
-                    }
-                    placeholder={`Marker ${index + 1}`}
-                    disabled={uploading}
-                  />
-                </div>
+          <div className="space-y-3">
+            {markers.map((marker, index) => {
+              const isExpanded = expandedMarkers.has(marker.id);
+              const isComplete = isMarkerComplete(marker);
 
-                {arLibrary === "mindar" && (
-                  <div className="space-y-2">
-                    <Label>Marker Image *</Label>
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) =>
-                        updateMarker(index, {
-                          markerFile: e.target.files?.[0] || null,
-                        })
-                      }
-                      disabled={uploading}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Upload gambar yang akan dideteksi
-                    </p>
-                  </div>
-                )}
+              return (
+                <Card
+                  key={marker.id}
+                  className={`transition-all ${
+                    isComplete
+                      ? "border-green-500 bg-green-50/50"
+                      : "border-dashed border-2"
+                  }`}
+                >
+                  <CardHeader
+                    className="cursor-pointer hover:bg-muted/50 transition-colors p-4"
+                    onClick={() => toggleMarkerExpanded(marker.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            isComplete ? "bg-green-500 text-white" : "bg-muted"
+                          }`}
+                        >
+                          {isComplete ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            index + 1
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold">
+                            {marker.name || `Marker ${index + 1}`}
+                          </h4>
+                          <p className="text-xs text-muted-foreground">
+                            {marker.contentFile?.name || "Belum ada content"}
+                          </p>
+                        </div>
+                      </div>
 
-                {arLibrary === "arjs" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Marker Type</Label>
-                      <RadioGroup
-                        value={(marker as ARJSMarker).markerType}
-                        onValueChange={(val) =>
-                          updateMarker(index, { markerType: val as any })
-                        }
-                        disabled={uploading}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            value="pattern"
-                            id={`pattern-${index}`}
-                          />
-                          <Label htmlFor={`pattern-${index}`}>
-                            Custom Pattern
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            value="barcode"
-                            id={`barcode-${index}`}
-                          />
-                          <Label htmlFor={`barcode-${index}`}>
-                            Barcode (0-63)
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="hiro" id={`hiro-${index}`} />
-                          <Label htmlFor={`hiro-${index}`}>
-                            Hiro (Default)
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="kanji" id={`kanji-${index}`} />
-                          <Label htmlFor={`kanji-${index}`}>Kanji</Label>
-                        </div>
-                      </RadioGroup>
+                      <div className="flex items-center gap-2">
+                        {isComplete && (
+                          <Badge variant="default" className="bg-green-500">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Complete
+                          </Badge>
+                        )}
+                        {markers.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeMarker(index);
+                            }}
+                            disabled={uploading}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {isExpanded ? (
+                          <ChevronUp className="w-5 h-5" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5" />
+                        )}
+                      </div>
                     </div>
+                  </CardHeader>
 
-                    {/* ✅ NEW: Marker Image Upload for AR.js */}
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4" />
-                        Marker Preview Image (Opsional)
-                      </Label>
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) =>
-                          updateMarker(index, {
-                            markerImageFile: e.target.files?.[0] || null,
-                          })
-                        }
-                        disabled={uploading}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Upload foto marker untuk preview di daftar project
-                      </p>
-                    </div>
-
-                    {(marker as ARJSMarker).markerType === "pattern" && (
+                  {isExpanded && (
+                    <CardContent className="p-4 pt-0 space-y-4">
                       <div className="space-y-2">
-                        <Label>Pattern File (.patt) *</Label>
+                        <Label>Nama Marker *</Label>
                         <Input
-                          type="file"
-                          accept=".patt"
+                          value={marker.name}
                           onChange={(e) =>
+                            updateMarker(index, { name: e.target.value })
+                          }
+                          placeholder={`Marker ${index + 1}`}
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label>Tipe Marker</Label>
+                        <RadioGroup
+                          value={marker.markerType}
+                          onValueChange={(val) =>
                             updateMarker(index, {
-                              patternFile: e.target.files?.[0] || null,
+                              markerType: val as any,
                             })
                           }
+                          disabled={uploading}
+                          className="grid grid-cols-2 gap-3"
+                        >
+                          {markerTypes.map((type) => {
+                            const TypeIcon = type.icon;
+                            return (
+                              <Card
+                                key={type.value}
+                                className={`cursor-pointer transition-all hover:border-primary/50 ${
+                                  marker.markerType === type.value
+                                    ? "border-primary bg-primary/5 shadow-sm"
+                                    : ""
+                                }`}
+                                onClick={() =>
+                                  !uploading &&
+                                  updateMarker(index, {
+                                    markerType: type.value as any,
+                                  })
+                                }
+                              >
+                                <CardContent className="p-3">
+                                  <div className="flex items-start gap-2">
+                                    <RadioGroupItem
+                                      value={type.value}
+                                      id={`${type.value}-${index}`}
+                                      className="mt-0.5"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <TypeIcon className="w-4 h-4" />
+                                        <Label
+                                          htmlFor={`${type.value}-${index}`}
+                                          className="cursor-pointer font-semibold text-sm"
+                                        >
+                                          {type.label}
+                                        </Label>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {type.desc}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </RadioGroup>
+                      </div>
+
+                      {marker.markerType === "pattern" && (
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label>Pattern File (.patt) *</Label>
+                            <Input
+                              type="file"
+                              accept=".patt"
+                              onChange={(e) =>
+                                updateMarker(index, {
+                                  patternFile: e.target.files?.[0] || null,
+                                })
+                              }
+                              disabled={uploading}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Upload file .patt yang sudah di-generate
+                            </p>
+                          </div>
+
+                          <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                              <span className="w-full border-t" />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                              <span className="bg-background px-2 text-muted-foreground">
+                                Atau
+                              </span>
+                            </div>
+                          </div>
+
+                          <PatternGeneratorButton
+                            disabled={uploading}
+                            onPatternGenerated={(data) => {
+                              updateMarker(index, {
+                                patternFile: data.patternFile,
+                                markerImageFile: data.markerImageFile,
+                              });
+                              toast({
+                                title: "Pattern Generated!",
+                                description:
+                                  "Pattern berhasil di-generate dari gambar",
+                              });
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {marker.markerType === "barcode" && (
+                        <div className="space-y-2">
+                          <Label>Barcode Value (0-63)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="63"
+                            value={marker.barcodeValue || 0}
+                            onChange={(e) =>
+                              updateMarker(index, {
+                                barcodeValue: parseInt(e.target.value),
+                              })
+                            }
+                            disabled={uploading}
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <Image className="w-4 h-4" />
+                          Preview Marker (Opsional)
+                        </Label>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) =>
+                            updateMarker(index, {
+                              markerImageFile: e.target.files?.[0] || null,
+                            })
+                          }
+                          disabled={uploading}
+                        />
+                        {marker.markerImageFile && (
+                          <div className="w-32 h-32 rounded-lg overflow-hidden border-2 border-primary">
+                            <img
+                              src={getFilePreview(marker.markerImageFile) || ""}
+                              alt="Preview"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Upload foto marker untuk preview di daftar project
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Tipe Konten AR</Label>
+                        <div className="flex gap-3">
+                          <Button
+                            type="button"
+                            variant={
+                              marker.contentType === "video"
+                                ? "default"
+                                : "outline"
+                            }
+                            onClick={() =>
+                              updateMarker(index, { contentType: "video" })
+                            }
+                            disabled={uploading}
+                            className="flex-1"
+                          >
+                            <FileVideo className="w-4 h-4 mr-2" />
+                            Video
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={
+                              marker.contentType === "image"
+                                ? "default"
+                                : "outline"
+                            }
+                            onClick={() =>
+                              updateMarker(index, { contentType: "image" })
+                            }
+                            disabled={uploading}
+                            className="flex-1"
+                          >
+                            <Image className="w-4 h-4 mr-2" />
+                            Gambar
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>File Konten AR *</Label>
+                        <Input
+                          type="file"
+                          accept={
+                            marker.contentType === "video"
+                              ? "video/*"
+                              : "image/*"
+                          }
+                          onChange={(e) =>
+                            updateMarker(index, {
+                              contentFile: e.target.files?.[0] || null,
+                            })
+                          }
+                          disabled={uploading}
+                        />
+                        {marker.contentFile && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                            {marker.contentFile.name}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <Label>Ukuran Konten</Label>
+                          <span className="text-sm font-medium">
+                            {marker.scale.toFixed(1)}x
+                          </span>
+                        </div>
+                        <Slider
+                          value={[marker.scale]}
+                          onValueChange={(val) =>
+                            updateMarker(index, { scale: val[0] })
+                          }
+                          min={0.5}
+                          max={3}
+                          step={0.1}
                           disabled={uploading}
                         />
                         <p className="text-xs text-muted-foreground">
-                          File .patt dari AR.js Pattern Generator
+                          Sesuaikan ukuran konten yang muncul di AR
                         </p>
                       </div>
-                    )}
-
-                    {(marker as ARJSMarker).markerType === "barcode" && (
-                      <div className="space-y-2">
-                        <Label>Barcode Value (0-63)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="63"
-                          value={(marker as ARJSMarker).barcodeValue || 0}
-                          onChange={(e) =>
-                            updateMarker(index, {
-                              barcodeValue: parseInt(e.target.value),
-                            })
-                          }
-                          disabled={uploading}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <div className="flex gap-4">
-                  <Button
-                    type="button"
-                    variant={
-                      marker.contentType === "video" ? "default" : "outline"
-                    }
-                    onClick={() =>
-                      updateMarker(index, { contentType: "video" })
-                    }
-                    disabled={uploading}
-                    className="flex-1"
-                  >
-                    <FileVideo className="w-4 h-4 mr-2" />
-                    Video
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={
-                      marker.contentType === "image" ? "default" : "outline"
-                    }
-                    onClick={() =>
-                      updateMarker(index, { contentType: "image" })
-                    }
-                    disabled={uploading}
-                    className="flex-1"
-                  >
-                    <Image className="w-4 h-4 mr-2" />
-                    Image
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Content File *</Label>
-                  <Input
-                    type="file"
-                    accept={
-                      marker.contentType === "video" ? "video/*" : "image/*"
-                    }
-                    onChange={(e) =>
-                      updateMarker(index, {
-                        contentFile: e.target.files?.[0] || null,
-                      })
-                    }
-                    disabled={uploading}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label>Ukuran {marker.scale.toFixed(1)}x</Label>
-                  </div>
-                  <Slider
-                    value={[marker.scale]}
-                    onValueChange={(val) =>
-                      updateMarker(index, { scale: val[0] })
-                    }
-                    min={0.5}
-                    max={3}
-                    step={0.1}
-                    disabled={uploading}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
         </div>
 
-        <Button onClick={handleSubmit} className="w-full" disabled={uploading}>
+        <Button
+          onClick={handleSubmit}
+          className="w-full h-12 text-base"
+          disabled={uploading || !isStepComplete(1) || !isStepComplete(2)}
+        >
           {uploading ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
               {currentStep}
             </>
           ) : (
             <>
-              <Upload className="w-4 h-4 mr-2" />
-              Buat Project ({markers.length} marker - {arLibrary.toUpperCase()})
+              <Upload className="w-5 h-5 mr-2" />
+              Buat Project ({markers.length} marker)
             </>
           )}
         </Button>
