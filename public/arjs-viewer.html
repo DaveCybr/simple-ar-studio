@@ -187,7 +187,7 @@
       function getDeviceRotation() {
         const manualRotation = params.get("rotation");
         if (manualRotation) return manualRotation;
-        return isMobileDevice() ? "0 -180 0" : "-75 0 0";
+        return isMobileDevice() ? "150 -90 0" : "-75 0 0";
       }
 
       const deviceRotation = getDeviceRotation();
