@@ -31,7 +31,6 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/pricing" element={<Pricing />} />
-            <Route path="/generator" element={<ARMarkerGenerator />} />
             <Route path="/view/:id" element={<ViewAR />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

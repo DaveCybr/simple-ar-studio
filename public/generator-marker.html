@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AR Pattern Marker Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+        color: #333;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2em;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        opacity: 0.9;
+        font-size: 1.1em;
+      }
+
+      .content {
+        padding: 40px;
+      }
+
+      .section {
+        margin-bottom: 30px;
+      }
+
+      .section-title {
+        font-size: 1.3em;
+        color: #667eea;
+        margin-bottom: 15px;
+        font-weight: 600;
+      }
+
+      .upload-area {
+        border: 3px dashed #667eea;
+        border-radius: 15px;
+        padding: 40px;
+        text-align: center;
+        background: #f8f9ff;
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .upload-area:hover {
+        border-color: #764ba2;
+        background: #f0f2ff;
+      }
+
+      .upload-area input[type="file"] {
+        display: none;
+      }
+
+      .upload-label {
+        font-size: 1.1em;
+        color: #667eea;
+        cursor: pointer;
+        display: block;
+      }
+
+      .upload-label:hover {
+        color: #764ba2;
+      }
+
+      .controls {
+        background: #f8f9ff;
+        padding: 25px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+      }
+
+      .control-group {
+        margin-bottom: 20px;
+      }
+
+      .control-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #555;
+      }
+
+      .control-group input[type="range"] {
+        width: 100%;
+        height: 8px;
+        border-radius: 5px;
+        background: #ddd;
+        outline: none;
+        -webkit-appearance: none;
+      }
+
+      .control-group input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #667eea;
+        cursor: pointer;
+      }
+
+      .control-group input[type="range"]::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #667eea;
+        cursor: pointer;
+        border: none;
+      }
+
+      .control-group input[type="text"],
+      .control-group input[type="number"] {
+        width: 100%;
+        padding: 10px 15px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-size: 1em;
+        transition: border 0.3s ease;
+      }
+
+      .control-group input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #667eea;
+      }
+
+      .control-group input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      #imageContainer {
+        text-align: center;
+        margin: 30px 0;
+        padding: 20px;
+        background: #f8f9ff;
+        border-radius: 15px;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #imageContainer img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      }
+
+      .button-group {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+      }
+
+      button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 25px;
+        border-radius: 10px;
+        font-size: 1em;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .empty-state {
+        color: #999;
+        font-size: 1.1em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🎯 AR Pattern Marker Generator</h1>
+        <p>Create custom AR markers for your projects</p>
+      </div>
+
+      <div class="content">
+        <div class="section">
+          <h2 class="section-title">1. Upload Image</h2>
+          <div
+            class="upload-area"
+            onclick="document.getElementById('fileinput').click()"
+          >
+            <label for="fileinput" class="upload-label">
+              📁 Click to upload or drag and drop your image
+            </label>
+            <input type="file" id="fileinput" accept="image/*" />
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-title">2. Customize Marker</h2>
+          <div class="controls">
+            <div class="control-group">
+              <label for="patternRatioSlider">
+                <span>Pattern Ratio 0.50</span>
+              </label>
+              <input
+                type="range"
+                id="patternRatioSlider"
+                min="0"
+                max="100"
+                value="50"
+              />
+            </div>
+
+            <div class="control-group">
+              <label for="imageSize">
+                <span>Image size 512px</span>
+              </label>
+              <input
+                type="range"
+                id="imageSize"
+                min="128"
+                max="2048"
+                value="512"
+                step="128"
+              />
+            </div>
+
+            <div class="control-group">
+              <label for="borderColor">Border Color</label>
+              <input
+                type="text"
+                id="borderColor"
+                value="black"
+                placeholder="Enter color (e.g., black, #FF0000)"
+              />
+            </div>
+
+            <div class="control-group">
+              <label>
+                <input
+                  type="checkbox"
+                  id="fullImageMode"
+                  style="width: auto; margin-right: 8px"
+                />
+                Full Image Mode (No Border)
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-title">3. Preview</h2>
+          <div id="imageContainer">
+            <div class="empty-state">Upload an image to see preview</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-title">4. Download</h2>
+          <div class="button-group">
+            <button id="buttonDownloadEncoded">Download .patt File</button>
+            <button id="buttonDownloadFullImage">Download Marker Image</button>
+            <button id="buttonDownloadPDFOnePerPage">PDF (1 per page)</button>
+            <button id="buttonDownloadPDFTwoPerPage">PDF (2 per page)</button>
+            <button id="buttonDownloadPDFSixPerPage">PDF (6 per page)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var THREEx = THREEx || {};
+      THREEx.ArPatternFile = {};
+
+      THREEx.ArPatternFile.encodeImageURL = function (imageURL, onComplete) {
+        var image = new Image();
+        image.onload = function () {
+          var patternFileString = THREEx.ArPatternFile.encodeImage(image);
+          onComplete(patternFileString);
+        };
+        image.src = imageURL;
+      };
+
+      THREEx.ArPatternFile.encodeImage = function (image) {
+        var canvas = document.createElement("canvas");
+        var context = canvas.getContext("2d");
+        canvas.width = 16;
+        canvas.height = 16;
+
+        var patternFileString = "";
+        for (
+          var orientation = 0;
+          orientation > -2 * Math.PI;
+          orientation -= Math.PI / 2
+        ) {
+          context.save();
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.translate(canvas.width / 2, canvas.height / 2);
+          context.rotate(orientation);
+          context.drawImage(
+            image,
+            -canvas.width / 2,
+            -canvas.height / 2,
+            canvas.width,
+            canvas.height
+          );
+          context.restore();
+
+          var imageData = context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
+
+          if (orientation !== 0) patternFileString += "\n";
+          for (var channelOffset = 2; channelOffset >= 0; channelOffset--) {
+            for (var y = 0; y < imageData.height; y++) {
+              for (var x = 0; x < imageData.width; x++) {
+                if (x !== 0) patternFileString += " ";
+                var offset = y * imageData.width * 4 + x * 4 + channelOffset;
+                var value = imageData.data[offset];
+                patternFileString += String(value).padStart(3);
+              }
+              patternFileString += "\n";
+            }
+          }
+        }
+        return patternFileString;
+      };
+
+      THREEx.ArPatternFile.triggerDownload = function (
+        patternFileString,
+        fileName = "pattern-marker.patt"
+      ) {
+        var domElement = window.document.createElement("a");
+        domElement.href = window.URL.createObjectURL(
+          new Blob([patternFileString], { type: "text/plain" })
+        );
+        domElement.download = fileName;
+        document.body.appendChild(domElement);
+        domElement.click();
+        document.body.removeChild(domElement);
+      };
+
+      THREEx.ArPatternFile.buildFullMarker = function (
+        innerImageURL,
+        pattRatio,
+        size,
+        color,
+        onComplete
+      ) {
+        var whiteMargin = 0.1;
+        var blackMargin = (1 - 2 * whiteMargin) * ((1 - pattRatio) / 2);
+        var innerMargin = whiteMargin + blackMargin;
+
+        var canvas = document.createElement("canvas");
+        var context = canvas.getContext("2d");
+        canvas.width = canvas.height = size;
+
+        context.fillStyle = "white";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        context.fillStyle = color;
+        context.fillRect(
+          whiteMargin * canvas.width,
+          whiteMargin * canvas.height,
+          canvas.width * (1 - 2 * whiteMargin),
+          canvas.height * (1 - 2 * whiteMargin)
+        );
+
+        context.fillStyle = "white";
+        context.fillRect(
+          innerMargin * canvas.width,
+          innerMargin * canvas.height,
+          canvas.width * (1 - 2 * innerMargin),
+          canvas.height * (1 - 2 * innerMargin)
+        );
+
+        var innerImage = document.createElement("img");
+        innerImage.addEventListener("load", function () {
+          context.drawImage(
+            innerImage,
+            innerMargin * canvas.width,
+            innerMargin * canvas.height,
+            canvas.width * (1 - 2 * innerMargin),
+            canvas.height * (1 - 2 * innerMargin)
+          );
+          var imageUrl = canvas.toDataURL();
+          onComplete(imageUrl);
+        });
+        innerImage.src = innerImageURL;
+      };
+
+      var innerImageURL = null;
+      var fullMarkerURL = null;
+      var imageName = null;
+
+      innerImageURL =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      updateFullMarkerImage();
+
+      document
+        .querySelector("#buttonDownloadEncoded")
+        .addEventListener("click", function () {
+          if (innerImageURL === null) {
+            alert("Upload a file first");
+            return;
+          }
+          THREEx.ArPatternFile.encodeImageURL(
+            innerImageURL,
+            function onComplete(patternFileString) {
+              THREEx.ArPatternFile.triggerDownload(
+                patternFileString,
+                "pattern-" + (imageName || "marker") + ".patt"
+              );
+            }
+          );
+        });
+
+      document
+        .querySelector("#buttonDownloadFullImage")
+        .addEventListener("click", function () {
+          if (innerImageURL === null) {
+            alert("Upload a file first");
+            return;
+          }
+          var domElement = window.document.createElement("a");
+          domElement.href = fullMarkerURL;
+          domElement.download = "pattern-" + (imageName || "marker") + ".png";
+          document.body.appendChild(domElement);
+          domElement.click();
+          document.body.removeChild(domElement);
+        });
+
+      document
+        .querySelector("#patternRatioSlider")
+        .addEventListener("input", function () {
+          var patternRatio =
+            document.querySelector("#patternRatioSlider").value / 100;
+          var domElement = document.querySelector(
+            "[for=patternRatioSlider] span"
+          );
+          domElement.innerHTML = `Pattern Ratio ${patternRatio.toFixed(2)}`;
+          updateFullMarkerImage();
+        });
+
+      document
+        .querySelector("#imageSize")
+        .addEventListener("input", function () {
+          var imageSize = document.querySelector("#imageSize").value;
+          var domElement = document.querySelector("[for=imageSize] span");
+          domElement.innerHTML = `Image size ${imageSize}px`;
+          updateFullMarkerImage();
+        });
+
+      document
+        .querySelector("#borderColor")
+        .addEventListener("input", function () {
+          updateFullMarkerImage();
+        });
+
+      document
+        .querySelector("#fullImageMode")
+        .addEventListener("change", function () {
+          var isFullImage = this.checked;
+          document.querySelector("#patternRatioSlider").disabled = isFullImage;
+          document.querySelector("#borderColor").disabled = isFullImage;
+
+          if (isFullImage) {
+            document.querySelector("#patternRatioSlider").style.opacity = "0.5";
+            document.querySelector("#borderColor").style.opacity = "0.5";
+          } else {
+            document.querySelector("#patternRatioSlider").style.opacity = "1";
+            document.querySelector("#borderColor").style.opacity = "1";
+          }
+
+          updateFullMarkerImage();
+        });
+
+      document
+        .querySelector("#fileinput")
+        .addEventListener("change", function () {
+          var file = this.files[0];
+          imageName = file.name;
+          imageName =
+            imageName.substring(0, imageName.lastIndexOf(".")) || imageName;
+
+          var reader = new FileReader();
+          reader.onload = function (event) {
+            innerImageURL = event.target.result;
+            updateFullMarkerImage();
+          };
+          reader.readAsDataURL(file);
+        });
+
+      function updateFullMarkerImage() {
+        var patternRatio =
+          document.querySelector("#patternRatioSlider").value / 100;
+        var imageSize = document.querySelector("#imageSize").value;
+        var borderColor = document.querySelector("#borderColor").value;
+        var isFullImage = document.querySelector("#fullImageMode").checked;
+
+        function hexaColor(color) {
+          return /^#[0-9A-F]{6}$/i.test(color);
+        }
+
+        var s = new Option().style;
+        s.color = borderColor;
+        if (
+          borderColor === "" ||
+          (s.color != borderColor && !hexaColor(borderColor))
+        ) {
+          borderColor = "black";
+        }
+
+        if (isFullImage) {
+          // Full image mode - no border
+          var canvas = document.createElement("canvas");
+          var context = canvas.getContext("2d");
+          canvas.width = canvas.height = imageSize;
+
+          var innerImage = document.createElement("img");
+          innerImage.addEventListener("load", function () {
+            context.drawImage(innerImage, 0, 0, canvas.width, canvas.height);
+            fullMarkerURL = canvas.toDataURL();
+
+            var fullMarkerImage = document.createElement("img");
+            fullMarkerImage.src = fullMarkerURL;
+            var container = document.querySelector("#imageContainer");
+            while (container.firstChild)
+              container.removeChild(container.firstChild);
+            container.appendChild(fullMarkerImage);
+          });
+          innerImage.src = innerImageURL;
+        } else {
+          // Normal mode with border
+          THREEx.ArPatternFile.buildFullMarker(
+            innerImageURL,
+            patternRatio,
+            imageSize,
+            borderColor,
+            function onComplete(markerUrl) {
+              fullMarkerURL = markerUrl;
+              var fullMarkerImage = document.createElement("img");
+              fullMarkerImage.src = fullMarkerURL;
+              var container = document.querySelector("#imageContainer");
+              while (container.firstChild)
+                container.removeChild(container.firstChild);
+              container.appendChild(fullMarkerImage);
+            }
+          );
+        }
+      }
+
+      document
+        .querySelector("#buttonDownloadPDFOnePerPage")
+        .addEventListener("click", generatePdfOnePerPage);
+      document
+        .querySelector("#buttonDownloadPDFTwoPerPage")
+        .addEventListener("click", generatePdfTwoPerPage);
+      document
+        .querySelector("#buttonDownloadPDFSixPerPage")
+        .addEventListener("click", generatePdfSixPerPage);
+
+      function generatePdfOnePerPage() {
+        var docDefinition = {
+          content: [
+            {
+              image: fullMarkerURL,
+              width: 600,
+              alignment: "center",
+            },
+          ],
+        };
+        pdfMake.createPdf(docDefinition).open();
+      }
+
+      function generatePdfTwoPerPage() {
+        var docDefinition = {
+          content: [
+            { image: fullMarkerURL, width: 300, alignment: "center" },
+            { image: fullMarkerURL, width: 300, alignment: "center" },
+          ],
+        };
+        pdfMake.createPdf(docDefinition).open();
+      }
+
+      function generatePdfSixPerPage() {
+        var docDefinition = {
+          content: [
+            {
+              columns: [
+                { image: fullMarkerURL, width: 250 },
+                { image: fullMarkerURL, width: 250 },
+              ],
+            },
+            {
+              columns: [
+                { image: fullMarkerURL, width: 250 },
+                { image: fullMarkerURL, width: 250 },
+              ],
+            },
+            {
+              columns: [
+                { image: fullMarkerURL, width: 250 },
+                { image: fullMarkerURL, width: 250 },
+              ],
+            },
+          ],
+        };
+        pdfMake.createPdf(docDefinition).open();
+      }
+    </script>
+  </body>
+</html>
