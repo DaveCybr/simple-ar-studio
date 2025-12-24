@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR.js Viewer - Billboard Mode</title>
+    <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      .loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        color: white;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .loading.hidden {
+        display: none;
+      }
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .hint {
+        position: fixed;
+        bottom: 160px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 12px;
+        z-index: 100;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        opacity: 0.8;
+        pointer-events: none;
+      }
+      .hint.found {
+        background: rgba(34, 197, 94, 0.6);
+      }
+
+      .controls {
+        position: fixed;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        padding: 12px;
+        border-radius: 12px;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-family: system-ui, -apple-system, sans-serif;
+        min-width: 300px;
+      }
+      .controls button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .controls button:active {
+        background: #2563eb;
+      }
+      .rotation-display {
+        color: #22c55e;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+        background: rgba(34, 197, 94, 0.1);
+        padding: 6px;
+        border-radius: 6px;
+      }
+      .preset-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .preset-grid button {
+        font-size: 10px;
+        padding: 6px;
+      }
+      .billboard-btn {
+        background: #6b7280 !important;
+      }
+      .billboard-btn.active {
+        background: #22c55e !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Memuat AR...</p>
+    </div>
+
+    <div class="hint" id="hint">Arahkan kamera ke marker</div>
+
+    <div class="controls" id="controls" style="display: none">
+      <button
+        id="billboardBtn"
+        class="billboard-btn"
+        onclick="toggleBillboard()"
+      >
+        Billboard: OFF
+      </button>
+
+      <div class="rotation-display" id="rotationDisplay">
+        Rotation: 0° 0° 0°
+      </div>
+
+      <div
+        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px"
+      >
+        <button onclick="adjustRotation('x', -15)">X -15°</button>
+        <button onclick="adjustRotation('y', -15)">Y -15°</button>
+        <button onclick="adjustRotation('z', -15)">Z -15°</button>
+        <button onclick="adjustRotation('x', 15)">X +15°</button>
+        <button onclick="adjustRotation('y', 15)">Y +15°</button>
+        <button onclick="adjustRotation('z', 15)">Z +15°</button>
+      </div>
+
+      <div class="preset-grid">
+        <button onclick="setRotation(0, 0, 0)">Flat (0,0,0)</button>
+        <button onclick="setRotation(-90, 0, 0)">X-90</button>
+        <button onclick="setRotation(0, -90, 0)">Y-90</button>
+        <button onclick="setRotation(0, 0, -90)">Z-90</button>
+        <button onclick="setRotation(90, 0, 0)">X+90</button>
+        <button onclick="setRotation(0, 180, 0)">Y+180</button>
+      </div>
+
+      <button onclick="resetRotation()" style="background: #ef4444">
+        Reset
+      </button>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const markersParam = params.get("markers");
+      let markers = [];
+      let currentRotation = { x: 0, y: 0, z: 0 };
+      let videoPlanes = [];
+      let billboardMode = false;
+      let camera = null;
+
+      if (markersParam) {
+        try {
+          markers = JSON.parse(decodeURIComponent(markersParam));
+        } catch (e) {
+          console.error("Parse error:", e);
+        }
+      }
+
+      function adjustRotation(axis, amount) {
+        currentRotation[axis] += amount;
+        updateAllRotations();
+      }
+
+      function setRotation(x, y, z) {
+        currentRotation = { x, y, z };
+        updateAllRotations();
+      }
+
+      function resetRotation() {
+        currentRotation = { x: 0, y: 0, z: 0 };
+        updateAllRotations();
+      }
+
+      function updateAllRotations() {
+        if (billboardMode) {
+          billboardMode = false;
+          const btn = document.getElementById("billboardBtn");
+          btn.textContent = "Billboard: OFF";
+          btn.classList.remove("active");
+        }
+
+        const rotString = `${currentRotation.x} ${currentRotation.y} ${currentRotation.z}`;
+        videoPlanes.forEach((plane) => {
+          plane.setAttribute("rotation", rotString);
+        });
+        document.getElementById(
+          "rotationDisplay"
+        ).textContent = `Rotation: ${currentRotation.x}° ${currentRotation.y}° ${currentRotation.z}°`;
+      }
+
+      function toggleBillboard() {
+        billboardMode = !billboardMode;
+        const btn = document.getElementById("billboardBtn");
+        if (billboardMode) {
+          btn.textContent = "Billboard: ON";
+          btn.classList.add("active");
+          currentRotation = { x: 0, y: 0, z: 0 };
+        } else {
+          btn.textContent = "Billboard: OFF";
+          btn.classList.remove("active");
+        }
+      }
+
+      function updateBillboard() {
+        if (!billboardMode || !camera) return;
+
+        videoPlanes.forEach((plane) => {
+          const marker = plane.parentElement;
+          if (!marker || !marker.object3D.visible) return;
+
+          try {
+            const cameraWorldPos = new THREE.Vector3();
+            camera.object3D.getWorldPosition(cameraWorldPos);
+
+            const markerWorldPos = new THREE.Vector3();
+            marker.object3D.getWorldPosition(markerWorldPos);
+
+            const direction = new THREE.Vector3();
+            direction.subVectors(cameraWorldPos, markerWorldPos);
+            direction.y = 0;
+            direction.normalize();
+
+            if (direction.length() > 0) {
+              const angle = Math.atan2(direction.x, direction.z);
+              plane.object3D.rotation.set(0, angle, 0);
+            }
+          } catch (e) {
+            console.error("Billboard error:", e);
+          }
+        });
+      }
+
+      if (markers.length === 0) {
+        document.getElementById("loading").innerHTML =
+          '<p style="color: #ef4444;">Error: Marker tidak ditemukan</p>';
+      } else {
+        function createARJSScene() {
+          const scene = document.createElement("a-scene");
+
+          scene.setAttribute("embedded", "");
+          scene.setAttribute(
+            "arjs",
+            "sourceType: webcam; " +
+              "debugUIEnabled: false; " +
+              "detectionMode: mono_and_matrix; " +
+              "matrixCodeType: 3x3; " +
+              "trackingMethod: best; " +
+              "maxDetectionRate: 60; " +
+              "canvasWidth: 640; " +
+              "canvasHeight: 480; " +
+              "minConfidence: 0.6;"
+          );
+          scene.setAttribute("vr-mode-ui", "enabled: false");
+          scene.setAttribute(
+            "renderer",
+            "logarithmicDepthBuffer: true; precision: medium;"
+          );
+
+          camera = document.createElement("a-entity");
+          camera.setAttribute("camera", "");
+          scene.appendChild(camera);
+
+          markers.forEach((marker, index) => {
+            const markerEntity = document.createElement("a-marker");
+
+            if (marker.markerData.markerType === "pattern") {
+              markerEntity.setAttribute("type", "pattern");
+              markerEntity.setAttribute("url", marker.markerData.patternUrl);
+            } else if (marker.markerData.markerType === "barcode") {
+              markerEntity.setAttribute("type", "barcode");
+              markerEntity.setAttribute(
+                "value",
+                marker.markerData.barcodeValue || 0
+              );
+            } else {
+              markerEntity.setAttribute(
+                "preset",
+                marker.markerData.preset || "hiro"
+              );
+            }
+
+            markerEntity.setAttribute("id", `marker-${index}`);
+            markerEntity.setAttribute("smooth", "true");
+            markerEntity.setAttribute("smoothCount", "10");
+            markerEntity.setAttribute("smoothTolerance", "0.05");
+            markerEntity.setAttribute("smoothThreshold", "5");
+
+            const scale = marker.scale || 1;
+            const baseHeight = 2.0 * scale;
+            const baseWidth = (9 / 16) * baseHeight;
+
+            if (marker.type === "video") {
+              let assets = scene.querySelector("a-assets");
+              if (!assets) {
+                assets = document.createElement("a-assets");
+                scene.appendChild(assets);
+              }
+
+              const video = document.createElement("video");
+              video.id = `arjs-video-${index}`;
+              video.src = marker.content;
+              video.setAttribute("crossorigin", "anonymous");
+              video.setAttribute("loop", "true");
+              video.setAttribute("playsinline", "");
+              video.setAttribute("webkit-playsinline", "");
+              video.preload = "auto";
+              video.muted = true;
+              assets.appendChild(video);
+
+              const videoPlane = document.createElement("a-video");
+              videoPlane.setAttribute("src", `#arjs-video-${index}`);
+              videoPlane.setAttribute("position", "0 0 0");
+              videoPlane.setAttribute("width", baseWidth);
+              videoPlane.setAttribute("height", baseHeight);
+              videoPlane.setAttribute("rotation", "0 0 0");
+              videoPlane.setAttribute(
+                "material",
+                "shader: flat; side: double;"
+              );
+              markerEntity.appendChild(videoPlane);
+
+              videoPlanes.push(videoPlane);
+            } else {
+              const imagePlane = document.createElement("a-image");
+              imagePlane.setAttribute("src", marker.content);
+              imagePlane.setAttribute("position", "0 0 0");
+              imagePlane.setAttribute("width", baseWidth);
+              imagePlane.setAttribute("height", baseHeight);
+              imagePlane.setAttribute("rotation", "0 0 0");
+              imagePlane.setAttribute(
+                "material",
+                "shader: flat; side: double;"
+              );
+              markerEntity.appendChild(imagePlane);
+
+              videoPlanes.push(imagePlane);
+            }
+
+            markerEntity.addEventListener("markerFound", () => {
+              const hint = document.getElementById("hint");
+              hint.textContent = `${marker.name} terdeteksi`;
+              hint.classList.add("found");
+
+              document.getElementById("controls").style.display = "flex";
+
+              if (marker.type === "video") {
+                const video = document.getElementById(`arjs-video-${index}`);
+                if (video) {
+                  video
+                    .play()
+                    .then(() => {
+                      setTimeout(() => (video.muted = false), 500);
+                    })
+                    .catch(() => {
+                      video.muted = true;
+                      video.play();
+                    });
+                }
+              }
+            });
+
+            markerEntity.addEventListener("markerLost", () => {
+              const hint = document.getElementById("hint");
+              hint.textContent = "Arahkan kamera ke marker";
+              hint.classList.remove("found");
+
+              if (marker.type === "video") {
+                const video = document.getElementById(`arjs-video-${index}`);
+                if (video) {
+                  video.pause();
+                  video.currentTime = 0;
+                  video.muted = true;
+                }
+              }
+            });
+
+            scene.appendChild(markerEntity);
+          });
+
+          document.body.appendChild(scene);
+
+          setInterval(updateBillboard, 50);
+
+          setTimeout(() => {
+            document.getElementById("loading").classList.add("hidden");
+          }, 2000);
+        }
+
+        createARJSScene();
+      }
+    </script>
+  </body>
+</html>
