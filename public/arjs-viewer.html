@@ -103,7 +103,6 @@
 
         async trackEvent(eventType, data = {}) {
           try {
-            // Send to your backend API
             await fetch("/api/analytics", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -187,7 +186,7 @@
       function getDeviceRotation() {
         const manualRotation = params.get("rotation");
         if (manualRotation) return manualRotation;
-        return isMobileDevice() ? "-150 0 0" : "-75 0 0";
+        return isMobileDevice() ? "-90 0 0" : "-90 0 0";
       }
 
       const deviceRotation = getDeviceRotation();
@@ -306,7 +305,6 @@
               hint.textContent = `${marker.name} terdeteksi`;
               hint.classList.add("found");
 
-              // Track scan
               if (analytics) analytics.trackScan(marker.name);
 
               if (marker.type === "video") {
@@ -330,7 +328,6 @@
               hint.textContent = "Arahkan kamera ke marker";
               hint.classList.remove("found");
 
-              // Track marker lost
               if (analytics) analytics.trackMarkerLost(marker.name);
 
               if (marker.type === "video") {
