@@ -368,15 +368,13 @@
               "matrixCodeType: 3x3; " +
               "trackingMethod: best; " +
               "maxDetectionRate: 60; " +
-              "sourceWidth:1280; " +
-              "sourceHeight:960; " +
-              "displayWidth: 1280; " +
-              "displayHeight: 960;"
+              "canvasWidth: 640; " +
+              "canvasHeight: 480;"
           );
           scene.setAttribute("vr-mode-ui", "enabled: false");
           scene.setAttribute(
             "renderer",
-            "logarithmicDepthBuffer: true; precision: high; antialias: true;"
+            "logarithmicDepthBuffer: true; precision: medium;"
           );
 
           const camera = document.createElement("a-entity");
