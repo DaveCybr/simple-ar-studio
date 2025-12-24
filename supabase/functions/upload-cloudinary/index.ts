@@ -74,7 +74,7 @@ serve(async (req) => {
 
     if (resourceType === "video") {
       transformation =
-        "q_auto:good,w_640,h_360,c_limit,vc_h264:baseline:3.0,ac_aac,br_1500k";
+        "q_auto:good,w_1920,h_1080,c_limit,vc_h264:main:4.0,ac_aac,br_4000k";
     } else if (resourceType === "image" && folder === "ar-content") {
       transformation = "q_auto:good,w_1024,h_1024,c_limit,f_auto";
     } else if (resourceType === "image" && folder === "ar-markers") {
