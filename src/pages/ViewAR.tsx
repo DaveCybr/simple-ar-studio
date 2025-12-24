@@ -156,8 +156,7 @@ const ViewAR = () => {
         }))
       )
     );
-    // viewerUrl = `/arjs-viewer.html?markers=${markersParam}`;
-    viewerUrl = `/ar-debug.html?markers=${markersParam}`;
+    viewerUrl = `/arjs-viewer.html?markers=${markersParam}`;
   }
 
   return (

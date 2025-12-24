@@ -250,9 +250,9 @@
 
             markerEntity.setAttribute("id", `marker-${index}`);
             markerEntity.setAttribute("smooth", "true");
-            markerEntity.setAttribute("smoothCount", "5");
-            markerEntity.setAttribute("smoothTolerance", "0.01");
-            markerEntity.setAttribute("smoothThreshold", "2");
+            markerEntity.setAttribute("smoothCount", "10");
+            markerEntity.setAttribute("smoothTolerance", "0.05");
+            markerEntity.setAttribute("smoothThreshold", "5");
 
             const scale = marker.scale || 1;
             const baseHeight = 2.0 * scale;
