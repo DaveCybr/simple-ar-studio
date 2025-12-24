@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR.js Viewer - Rotation Test</title>
+    <title>NANO AR Viewer</title>
     <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -123,7 +123,7 @@
 
     <div class="hint" id="hint">Arahkan kamera ke marker</div>
 
-    <div class="controls" id="controls" style="display: none">
+    <!-- <div class="controls" id="controls" style="display: none">
       <div class="rotation-display" id="rotationDisplay">
         Rotation: 0° 0° 0°
       </div>
@@ -151,13 +151,13 @@
       <button onclick="resetRotation()" style="background: #ef4444">
         Reset
       </button>
-    </div>
+    </div> -->
 
     <script>
       const params = new URLSearchParams(window.location.search);
       const markersParam = params.get("markers");
       let markers = [];
-      let currentRotation = { x: 0, y: 0, z: 0 };
+      let currentRotation = { x: -150, y: 0, z: 0 };
       let videoPlanes = [];
 
       if (markersParam) {
