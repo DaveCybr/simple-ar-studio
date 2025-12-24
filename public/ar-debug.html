@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR.js Viewer - Billboard Mode</title>
+    <title>NANO AR VIEWER - iOS Fixed</title>
     <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -47,7 +47,7 @@
       }
       .hint {
         position: fixed;
-        bottom: 160px;
+        bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
         background: rgba(0, 0, 0, 0.6);
@@ -66,57 +66,51 @@
         background: rgba(34, 197, 94, 0.6);
       }
 
-      .controls {
+      /* iOS Video Permission Overlay */
+      .video-permission {
         position: fixed;
-        bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.9);
-        padding: 12px;
-        border-radius: 12px;
-        z-index: 100;
-        display: flex;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        display: none;
         flex-direction: column;
-        gap: 8px;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+        color: white;
         font-family: system-ui, -apple-system, sans-serif;
-        min-width: 300px;
+        padding: 20px;
+        text-align: center;
       }
-      .controls button {
+      .video-permission.show {
+        display: flex;
+      }
+      .video-permission h2 {
+        margin: 0 0 10px 0;
+        font-size: 20px;
+      }
+      .video-permission p {
+        margin: 0 0 30px 0;
+        font-size: 14px;
+        color: #aaa;
+        max-width: 300px;
+      }
+      .video-permission button {
         background: #3b82f6;
         color: white;
         border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 12px;
+        padding: 15px 40px;
+        border-radius: 25px;
+        font-size: 16px;
+        font-weight: 600;
         cursor: pointer;
-        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
       }
-      .controls button:active {
+      .video-permission button:active {
         background: #2563eb;
-      }
-      .rotation-display {
-        color: #22c55e;
-        font-size: 11px;
-        font-weight: 600;
-        text-align: center;
-        background: rgba(34, 197, 94, 0.1);
-        padding: 6px;
-        border-radius: 6px;
-      }
-      .preset-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-      }
-      .preset-grid button {
-        font-size: 10px;
-        padding: 6px;
-      }
-      .billboard-btn {
-        background: #6b7280 !important;
-      }
-      .billboard-btn.active {
-        background: #22c55e !important;
+        transform: scale(0.98);
       }
     </style>
   </head>
@@ -126,54 +120,197 @@
       <p>Memuat AR...</p>
     </div>
 
-    <div class="hint" id="hint">Arahkan kamera ke marker</div>
-
-    <div class="controls" id="controls" style="display: none">
-      <button
-        id="billboardBtn"
-        class="billboard-btn"
-        onclick="toggleBillboard()"
-      >
-        Billboard: OFF
-      </button>
-
-      <div class="rotation-display" id="rotationDisplay">
-        Rotation: 0° 0° 0°
-      </div>
-
-      <div
-        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px"
-      >
-        <button onclick="adjustRotation('x', -15)">X -15°</button>
-        <button onclick="adjustRotation('y', -15)">Y -15°</button>
-        <button onclick="adjustRotation('z', -15)">Z -15°</button>
-        <button onclick="adjustRotation('x', 15)">X +15°</button>
-        <button onclick="adjustRotation('y', 15)">Y +15°</button>
-        <button onclick="adjustRotation('z', 15)">Z +15°</button>
-      </div>
-
-      <div class="preset-grid">
-        <button onclick="setRotation(0, 0, 0)">Flat (0,0,0)</button>
-        <button onclick="setRotation(-90, 0, 0)">X-90</button>
-        <button onclick="setRotation(0, -90, 0)">Y-90</button>
-        <button onclick="setRotation(0, 0, -90)">Z-90</button>
-        <button onclick="setRotation(90, 0, 0)">X+90</button>
-        <button onclick="setRotation(0, 180, 0)">Y+180</button>
-      </div>
-
-      <button onclick="resetRotation()" style="background: #ef4444">
-        Reset
-      </button>
+    <div class="video-permission" id="videoPermission">
+      <h2>🎬 Aktifkan Video</h2>
+      <p>
+        Tap tombol di bawah untuk mengaktifkan video AR. Ini diperlukan oleh
+        browser Anda.
+      </p>
+      <button id="enableVideoBtn">Aktifkan Video</button>
     </div>
+
+    <div class="hint" id="hint">Arahkan kamera ke marker</div>
 
     <script>
       const params = new URLSearchParams(window.location.search);
       const markersParam = params.get("markers");
+      const projectId = params.get("projectId");
       let markers = [];
-      let currentRotation = { x: 0, y: 0, z: 0 };
-      let videoPlanes = [];
-      let billboardMode = false;
-      let camera = null;
+      let videoElements = {};
+      let userInteracted = false;
+      let pendingVideos = [];
+
+      // Check if iOS
+      function isIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      }
+
+      // Analytics Tracking Class
+      class ARAnalytics {
+        constructor(projectId) {
+          this.projectId = projectId;
+          this.sessionId = `${Date.now()}-${Math.random()
+            .toString(36)
+            .substr(2, 9)}`;
+          this.sessionStart = Date.now();
+          this.scanCount = 0;
+          this.markerTimes = {};
+          this.deviceType = this.detectDevice();
+        }
+
+        detectDevice() {
+          const ua = navigator.userAgent.toLowerCase();
+          if (/tablet|ipad/i.test(ua)) return "tablet";
+          if (/mobile|android|iphone/i.test(ua)) return "mobile";
+          return "desktop";
+        }
+
+        async trackEvent(eventType, data = {}) {
+          try {
+            await fetch("/api/analytics", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                project_id: this.projectId,
+                session_id: this.sessionId,
+                event_type: eventType,
+                device_type: this.deviceType,
+                user_agent: navigator.userAgent,
+                ...data,
+              }),
+            });
+          } catch (error) {
+            console.error("Analytics error:", error);
+          }
+        }
+
+        trackView() {
+          this.trackEvent("view");
+        }
+
+        trackScan(markerName) {
+          this.scanCount++;
+          this.markerTimes[markerName] = Date.now();
+          this.trackEvent("scan", { marker_name: markerName });
+        }
+
+        trackMarkerLost(markerName) {
+          if (this.markerTimes[markerName]) {
+            const duration = Math.floor(
+              (Date.now() - this.markerTimes[markerName]) / 1000
+            );
+            this.trackEvent("marker_lost", {
+              marker_name: markerName,
+              duration,
+            });
+            delete this.markerTimes[markerName];
+          }
+        }
+
+        trackSessionEnd() {
+          const duration = Math.floor((Date.now() - this.sessionStart) / 1000);
+          this.trackEvent("session_end", {
+            duration,
+            total_scans: this.scanCount,
+          });
+        }
+
+        init() {
+          this.trackView();
+          window.addEventListener("beforeunload", () => this.trackSessionEnd());
+          document.addEventListener("visibilitychange", () => {
+            if (document.hidden) this.trackSessionEnd();
+          });
+        }
+      }
+
+      const analytics = projectId ? new ARAnalytics(projectId) : null;
+      if (analytics) analytics.init();
+
+      function isMobileDevice() {
+        const ua = navigator.userAgent.toLowerCase();
+        const isMobile =
+          /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+            ua
+          );
+        const isTouchDevice =
+          "ontouchstart" in window || navigator.maxTouchPoints > 0;
+        const isSmallScreen = window.innerWidth <= 768;
+        return isMobile || (isTouchDevice && isSmallScreen);
+      }
+
+      function getDeviceRotation() {
+        const manualRotation = params.get("rotation");
+        if (manualRotation) return manualRotation;
+        return isMobileDevice() ? "-90 0 0" : "-90 0 0";
+      }
+
+      const deviceRotation = getDeviceRotation();
+
+      // iOS Video Handler
+      async function initializeVideo(videoId) {
+        const video = document.getElementById(videoId);
+        if (!video) return false;
+
+        try {
+          // Reset video state
+          video.pause();
+          video.currentTime = 0;
+          video.muted = true;
+
+          // Preload
+          await video.load();
+
+          // Try to play
+          await video.play();
+
+          // Unmute after successful play (iOS requires this)
+          if (userInteracted) {
+            setTimeout(() => {
+              video.muted = false;
+              video.play().catch(() => {
+                video.muted = true;
+              });
+            }, 300);
+          }
+
+          return true;
+        } catch (error) {
+          console.log(`Video ${videoId} play error:`, error);
+
+          // If play failed and user hasn't interacted, show permission
+          if (!userInteracted && isIOS()) {
+            pendingVideos.push(videoId);
+            document.getElementById("videoPermission").classList.add("show");
+          }
+
+          return false;
+        }
+      }
+
+      // Handle user interaction for iOS
+      document
+        .getElementById("enableVideoBtn")
+        ?.addEventListener("click", async () => {
+          userInteracted = true;
+          document.getElementById("videoPermission").classList.remove("show");
+
+          // Initialize all pending videos
+          for (const videoId of pendingVideos) {
+            await initializeVideo(videoId);
+          }
+          pendingVideos = [];
+        });
+
+      // Also handle any touch/click on document
+      document.addEventListener(
+        "touchstart",
+        function enableAudio() {
+          userInteracted = true;
+          document.removeEventListener("touchstart", enableAudio);
+        },
+        { once: true }
+      );
 
       if (markersParam) {
         try {
@@ -181,80 +318,6 @@
         } catch (e) {
           console.error("Parse error:", e);
         }
-      }
-
-      function adjustRotation(axis, amount) {
-        currentRotation[axis] += amount;
-        updateAllRotations();
-      }
-
-      function setRotation(x, y, z) {
-        currentRotation = { x, y, z };
-        updateAllRotations();
-      }
-
-      function resetRotation() {
-        currentRotation = { x: 0, y: 0, z: 0 };
-        updateAllRotations();
-      }
-
-      function updateAllRotations() {
-        if (billboardMode) {
-          billboardMode = false;
-          const btn = document.getElementById("billboardBtn");
-          btn.textContent = "Billboard: OFF";
-          btn.classList.remove("active");
-        }
-
-        const rotString = `${currentRotation.x} ${currentRotation.y} ${currentRotation.z}`;
-        videoPlanes.forEach((plane) => {
-          plane.setAttribute("rotation", rotString);
-        });
-        document.getElementById(
-          "rotationDisplay"
-        ).textContent = `Rotation: ${currentRotation.x}° ${currentRotation.y}° ${currentRotation.z}°`;
-      }
-
-      function toggleBillboard() {
-        billboardMode = !billboardMode;
-        const btn = document.getElementById("billboardBtn");
-        if (billboardMode) {
-          btn.textContent = "Billboard: ON";
-          btn.classList.add("active");
-          currentRotation = { x: 0, y: 0, z: 0 };
-        } else {
-          btn.textContent = "Billboard: OFF";
-          btn.classList.remove("active");
-        }
-      }
-
-      function updateBillboard() {
-        if (!billboardMode || !camera) return;
-
-        videoPlanes.forEach((plane) => {
-          const marker = plane.parentElement;
-          if (!marker || !marker.object3D.visible) return;
-
-          try {
-            const cameraWorldPos = new THREE.Vector3();
-            camera.object3D.getWorldPosition(cameraWorldPos);
-
-            const markerWorldPos = new THREE.Vector3();
-            marker.object3D.getWorldPosition(markerWorldPos);
-
-            const direction = new THREE.Vector3();
-            direction.subVectors(cameraWorldPos, markerWorldPos);
-            direction.y = 0;
-            direction.normalize();
-
-            if (direction.length() > 0) {
-              const angle = Math.atan2(direction.x, direction.z);
-              plane.object3D.rotation.set(0, angle, 0);
-            }
-          } catch (e) {
-            console.error("Billboard error:", e);
-          }
-        });
       }
 
       if (markers.length === 0) {
@@ -274,8 +337,7 @@
               "trackingMethod: best; " +
               "maxDetectionRate: 60; " +
               "canvasWidth: 640; " +
-              "canvasHeight: 480; " +
-              "minConfidence: 0.6;"
+              "canvasHeight: 480;"
           );
           scene.setAttribute("vr-mode-ui", "enabled: false");
           scene.setAttribute(
@@ -283,7 +345,7 @@
             "logarithmicDepthBuffer: true; precision: medium;"
           );
 
-          camera = document.createElement("a-entity");
+          const camera = document.createElement("a-entity");
           camera.setAttribute("camera", "");
           scene.appendChild(camera);
 
@@ -324,65 +386,60 @@
               }
 
               const video = document.createElement("video");
-              video.id = `arjs-video-${index}`;
+              const videoId = `arjs-video-${index}`;
+              video.id = videoId;
               video.src = marker.content;
               video.setAttribute("crossorigin", "anonymous");
               video.setAttribute("loop", "true");
               video.setAttribute("playsinline", "");
               video.setAttribute("webkit-playsinline", "");
-              video.preload = "auto";
+              video.setAttribute("preload", "auto");
               video.muted = true;
+
+              // iOS specific attributes
+              if (isIOS()) {
+                video.setAttribute("x-webkit-airplay", "allow");
+                video.defaultMuted = true;
+              }
+
               assets.appendChild(video);
+              videoElements[videoId] = video;
 
               const videoPlane = document.createElement("a-video");
-              videoPlane.setAttribute("src", `#arjs-video-${index}`);
+              videoPlane.setAttribute("src", `#${videoId}`);
               videoPlane.setAttribute("position", "0 0 0");
               videoPlane.setAttribute("width", baseWidth);
               videoPlane.setAttribute("height", baseHeight);
-              videoPlane.setAttribute("rotation", "0 0 0");
+              videoPlane.setAttribute("rotation", deviceRotation);
               videoPlane.setAttribute(
                 "material",
                 "shader: flat; side: double;"
               );
               markerEntity.appendChild(videoPlane);
-
-              videoPlanes.push(videoPlane);
             } else {
               const imagePlane = document.createElement("a-image");
               imagePlane.setAttribute("src", marker.content);
               imagePlane.setAttribute("position", "0 0 0");
               imagePlane.setAttribute("width", baseWidth);
               imagePlane.setAttribute("height", baseHeight);
-              imagePlane.setAttribute("rotation", "0 0 0");
+              imagePlane.setAttribute("rotation", deviceRotation);
               imagePlane.setAttribute(
                 "material",
                 "shader: flat; side: double;"
               );
               markerEntity.appendChild(imagePlane);
-
-              videoPlanes.push(imagePlane);
             }
 
-            markerEntity.addEventListener("markerFound", () => {
+            markerEntity.addEventListener("markerFound", async () => {
               const hint = document.getElementById("hint");
               hint.textContent = `${marker.name} terdeteksi`;
               hint.classList.add("found");
 
-              document.getElementById("controls").style.display = "flex";
+              if (analytics) analytics.trackScan(marker.name);
 
               if (marker.type === "video") {
-                const video = document.getElementById(`arjs-video-${index}`);
-                if (video) {
-                  video
-                    .play()
-                    .then(() => {
-                      setTimeout(() => (video.muted = false), 500);
-                    })
-                    .catch(() => {
-                      video.muted = true;
-                      video.play();
-                    });
-                }
+                const videoId = `arjs-video-${index}`;
+                await initializeVideo(videoId);
               }
             });
 
@@ -391,8 +448,11 @@
               hint.textContent = "Arahkan kamera ke marker";
               hint.classList.remove("found");
 
+              if (analytics) analytics.trackMarkerLost(marker.name);
+
               if (marker.type === "video") {
-                const video = document.getElementById(`arjs-video-${index}`);
+                const videoId = `arjs-video-${index}`;
+                const video = document.getElementById(videoId);
                 if (video) {
                   video.pause();
                   video.currentTime = 0;
@@ -406,10 +466,21 @@
 
           document.body.appendChild(scene);
 
-          setInterval(updateBillboard, 50);
-
           setTimeout(() => {
             document.getElementById("loading").classList.add("hidden");
+
+            // Show permission overlay on iOS if there are videos
+            if (
+              isIOS() &&
+              Object.keys(videoElements).length > 0 &&
+              !userInteracted
+            ) {
+              setTimeout(() => {
+                document
+                  .getElementById("videoPermission")
+                  .classList.add("show");
+              }, 500);
+            }
           }, 2000);
         }
 
