@@ -65,12 +65,68 @@
       .hint.found {
         background: rgba(34, 197, 94, 0.6);
       }
+
+      /* iOS Video Permission Overlay */
+      .video-permission {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+        color: white;
+        font-family: system-ui, -apple-system, sans-serif;
+        padding: 20px;
+        text-align: center;
+      }
+      .video-permission.show {
+        display: flex;
+      }
+      .video-permission h2 {
+        margin: 0 0 10px 0;
+        font-size: 20px;
+      }
+      .video-permission p {
+        margin: 0 0 30px 0;
+        font-size: 14px;
+        color: #aaa;
+        max-width: 300px;
+      }
+      .video-permission button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        border-radius: 25px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+      }
+      .video-permission button:active {
+        background: #2563eb;
+        transform: scale(0.98);
+      }
     </style>
   </head>
   <body>
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <p>Memuat AR...</p>
+    </div>
+
+    <div class="video-permission" id="videoPermission">
+      <h2>🎬 Aktifkan Video</h2>
+      <p>
+        Tap tombol di bawah untuk mengaktifkan video AR. Ini diperlukan oleh
+        browser Anda.
+      </p>
+      <button id="enableVideoBtn">Aktifkan Video</button>
     </div>
 
     <div class="hint" id="hint">Arahkan kamera ke marker</div>
@@ -80,6 +136,14 @@
       const markersParam = params.get("markers");
       const projectId = params.get("projectId");
       let markers = [];
+      let videoElements = {};
+      let userInteracted = false;
+      let pendingVideos = [];
+
+      // Check if iOS
+      function isIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      }
 
       // Analytics Tracking Class
       class ARAnalytics {
@@ -153,24 +217,16 @@
 
         init() {
           this.trackView();
-
-          window.addEventListener("beforeunload", () => {
-            this.trackSessionEnd();
-          });
-
+          window.addEventListener("beforeunload", () => this.trackSessionEnd());
           document.addEventListener("visibilitychange", () => {
-            if (document.hidden) {
-              this.trackSessionEnd();
-            }
+            if (document.hidden) this.trackSessionEnd();
           });
         }
       }
 
-      // Initialize Analytics
       const analytics = projectId ? new ARAnalytics(projectId) : null;
       if (analytics) analytics.init();
 
-      // Device detection for rotation
       function isMobileDevice() {
         const ua = navigator.userAgent.toLowerCase();
         const isMobile =
@@ -186,10 +242,107 @@
       function getDeviceRotation() {
         const manualRotation = params.get("rotation");
         if (manualRotation) return manualRotation;
-        return isMobileDevice() ? "-90 0 0" : "-90 0 0";
+        return isMobileDevice() ? "-150 0 0" : "-75 0 0";
       }
 
       const deviceRotation = getDeviceRotation();
+
+      // iOS Video Handler
+      async function initializeVideo(videoId) {
+        const video = document.getElementById(videoId);
+        if (!video) return false;
+
+        try {
+          // CRITICAL: iOS requires muted=true for autoplay
+          //   video.muted = true;
+          //   video.setAttribute("muted", "true");
+
+          // Reset to beginning
+          video.currentTime = 0;
+
+          // Try to play (muted)
+          const playPromise = video.play();
+
+          if (playPromise !== undefined) {
+            await playPromise;
+            console.log(`✅ Video ${videoId} playing (muted)`);
+
+            // Try to unmute after a delay if user interacted
+            if (userInteracted) {
+              setTimeout(() => {
+                // video.muted = false;
+                video.play().catch(() => {
+                  console.log("Could not unmute, keeping muted");
+                  //   video.muted = true;
+                });
+              }, 500);
+            }
+          }
+
+          return true;
+        } catch (error) {
+          console.log(`❌ Video ${videoId} error:`, error.message);
+
+          // Show permission overlay if needed
+          if (!userInteracted) {
+            if (!pendingVideos.includes(videoId)) {
+              pendingVideos.push(videoId);
+            }
+            document.getElementById("videoPermission").classList.add("show");
+          }
+
+          return false;
+        }
+      }
+
+      // Handle user interaction for iOS
+      document
+        .getElementById("enableVideoBtn")
+        ?.addEventListener("click", async () => {
+          userInteracted = true;
+          document.getElementById("videoPermission").classList.remove("show");
+
+          // Initialize all pending videos
+          for (const videoId of pendingVideos) {
+            const video = document.getElementById(videoId);
+            if (video) {
+              try {
+                // video.muted = true;
+                await video.play();
+                console.log(`✅ Started ${videoId} after interaction`);
+              } catch (e) {
+                console.log(`❌ Still failed ${videoId}:`, e.message);
+              }
+            }
+          }
+          pendingVideos = [];
+        });
+
+      // Handle any touch to enable audio
+      let touchHandled = false;
+      document.addEventListener(
+        "touchstart",
+        async function enableAudio() {
+          if (touchHandled) return;
+          touchHandled = true;
+          userInteracted = true;
+
+          // Try to play all video elements
+          Object.keys(videoElements).forEach(async (videoId) => {
+            const video = videoElements[videoId];
+            if (video && video.paused) {
+              try {
+                // video.muted = false;
+                await video.play();
+              } catch (e) {
+                // video.muted = true;
+                video.play().catch(() => {});
+              }
+            }
+          });
+        },
+        { once: true }
+      );
 
       if (markersParam) {
         try {
@@ -265,18 +418,31 @@
               }
 
               const video = document.createElement("video");
-              video.id = `arjs-video-${index}`;
+              const videoId = `arjs-video-${index}`;
+              video.id = videoId;
               video.src = marker.content;
               video.setAttribute("crossorigin", "anonymous");
               video.setAttribute("loop", "true");
-              video.setAttribute("playsinline", "");
-              video.setAttribute("webkit-playsinline", "");
-              video.preload = "auto";
-              video.muted = true;
+
+              // CRITICAL iOS attributes
+              //   video.setAttribute("muted", "true");
+              //   video.muted = true;
+              video.setAttribute("playsinline", "true");
+              video.playsInline = true;
+              video.setAttribute("webkit-playsinline", "true");
+              video.setAttribute("preload", "metadata");
+              video.setAttribute("autoplay", "false"); // Don't use autoplay attribute
+
+              // iOS specific
+              if (isIOS()) {
+                video.setAttribute("x-webkit-airplay", "allow");
+              }
+
               assets.appendChild(video);
+              videoElements[videoId] = video;
 
               const videoPlane = document.createElement("a-video");
-              videoPlane.setAttribute("src", `#arjs-video-${index}`);
+              videoPlane.setAttribute("src", `#${videoId}`);
               videoPlane.setAttribute("position", "0 0 0");
               videoPlane.setAttribute("width", baseWidth);
               videoPlane.setAttribute("height", baseHeight);
@@ -300,7 +466,7 @@
               markerEntity.appendChild(imagePlane);
             }
 
-            markerEntity.addEventListener("markerFound", () => {
+            markerEntity.addEventListener("markerFound", async () => {
               const hint = document.getElementById("hint");
               hint.textContent = `${marker.name} terdeteksi`;
               hint.classList.add("found");
@@ -308,18 +474,8 @@
               if (analytics) analytics.trackScan(marker.name);
 
               if (marker.type === "video") {
-                const video = document.getElementById(`arjs-video-${index}`);
-                if (video) {
-                  video
-                    .play()
-                    .then(() => {
-                      setTimeout(() => (video.muted = false), 500);
-                    })
-                    .catch(() => {
-                      video.muted = true;
-                      video.play();
-                    });
-                }
+                const videoId = `arjs-video-${index}`;
+                await initializeVideo(videoId);
               }
             });
 
@@ -331,11 +487,12 @@
               if (analytics) analytics.trackMarkerLost(marker.name);
 
               if (marker.type === "video") {
-                const video = document.getElementById(`arjs-video-${index}`);
+                const videoId = `arjs-video-${index}`;
+                const video = document.getElementById(videoId);
                 if (video) {
                   video.pause();
                   video.currentTime = 0;
-                  video.muted = true;
+                  //   video.muted = true;
                 }
               }
             });
@@ -347,6 +504,19 @@
 
           setTimeout(() => {
             document.getElementById("loading").classList.add("hidden");
+
+            // Show permission overlay on iOS if there are videos
+            if (
+              isIOS() &&
+              Object.keys(videoElements).length > 0 &&
+              !userInteracted
+            ) {
+              setTimeout(() => {
+                document
+                  .getElementById("videoPermission")
+                  .classList.add("show");
+              }, 500);
+            }
           }, 2000);
         }
 

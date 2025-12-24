@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NANO AR VIEWER - iOS Fixed</title>
+    <title>NANO AR VIEWER</title>
     <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1c2407b26c61958baa93967b5412487cd94b290b/dist/aframe-master.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -254,8 +254,8 @@
 
         try {
           // CRITICAL: iOS requires muted=true for autoplay
-          video.muted = true;
-          video.setAttribute("muted", "true");
+          //   video.muted = true;
+          //   video.setAttribute("muted", "true");
 
           // Reset to beginning
           video.currentTime = 0;
@@ -270,10 +270,10 @@
             // Try to unmute after a delay if user interacted
             if (userInteracted) {
               setTimeout(() => {
-                video.muted = false;
+                // video.muted = false;
                 video.play().catch(() => {
                   console.log("Could not unmute, keeping muted");
-                  video.muted = true;
+                  //   video.muted = true;
                 });
               }, 500);
             }
@@ -307,7 +307,7 @@
             const video = document.getElementById(videoId);
             if (video) {
               try {
-                video.muted = true;
+                // video.muted = true;
                 await video.play();
                 console.log(`✅ Started ${videoId} after interaction`);
               } catch (e) {
@@ -332,10 +332,10 @@
             const video = videoElements[videoId];
             if (video && video.paused) {
               try {
-                video.muted = false;
+                // video.muted = false;
                 await video.play();
               } catch (e) {
-                video.muted = true;
+                // video.muted = true;
                 video.play().catch(() => {});
               }
             }
@@ -425,8 +425,8 @@
               video.setAttribute("loop", "true");
 
               // CRITICAL iOS attributes
-              video.setAttribute("muted", "true");
-              video.muted = true;
+              //   video.setAttribute("muted", "true");
+              //   video.muted = true;
               video.setAttribute("playsinline", "true");
               video.playsInline = true;
               video.setAttribute("webkit-playsinline", "true");
@@ -492,7 +492,7 @@
                 if (video) {
                   video.pause();
                   video.currentTime = 0;
-                  video.muted = true;
+                  //   video.muted = true;
                 }
               }
             });
