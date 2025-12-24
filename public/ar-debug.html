@@ -253,34 +253,41 @@
         if (!video) return false;
 
         try {
-          // Reset video state
-          video.pause();
-          video.currentTime = 0;
+          // CRITICAL: iOS requires muted=true for autoplay
           video.muted = true;
+          video.setAttribute("muted", "true");
 
-          // Preload
-          await video.load();
+          // Reset to beginning
+          video.currentTime = 0;
 
-          // Try to play
-          await video.play();
+          // Try to play (muted)
+          const playPromise = video.play();
 
-          // Unmute after successful play (iOS requires this)
-          if (userInteracted) {
-            setTimeout(() => {
-              video.muted = false;
-              video.play().catch(() => {
-                video.muted = true;
-              });
-            }, 300);
+          if (playPromise !== undefined) {
+            await playPromise;
+            console.log(`✅ Video ${videoId} playing (muted)`);
+
+            // Try to unmute after a delay if user interacted
+            if (userInteracted) {
+              setTimeout(() => {
+                video.muted = false;
+                video.play().catch(() => {
+                  console.log("Could not unmute, keeping muted");
+                  video.muted = true;
+                });
+              }, 500);
+            }
           }
 
           return true;
         } catch (error) {
-          console.log(`Video ${videoId} play error:`, error);
+          console.log(`❌ Video ${videoId} error:`, error.message);
 
-          // If play failed and user hasn't interacted, show permission
-          if (!userInteracted && isIOS()) {
-            pendingVideos.push(videoId);
+          // Show permission overlay if needed
+          if (!userInteracted) {
+            if (!pendingVideos.includes(videoId)) {
+              pendingVideos.push(videoId);
+            }
             document.getElementById("videoPermission").classList.add("show");
           }
 
@@ -297,17 +304,42 @@
 
           // Initialize all pending videos
           for (const videoId of pendingVideos) {
-            await initializeVideo(videoId);
+            const video = document.getElementById(videoId);
+            if (video) {
+              try {
+                video.muted = true;
+                await video.play();
+                console.log(`✅ Started ${videoId} after interaction`);
+              } catch (e) {
+                console.log(`❌ Still failed ${videoId}:`, e.message);
+              }
+            }
           }
           pendingVideos = [];
         });
 
-      // Also handle any touch/click on document
+      // Handle any touch to enable audio
+      let touchHandled = false;
       document.addEventListener(
         "touchstart",
-        function enableAudio() {
+        async function enableAudio() {
+          if (touchHandled) return;
+          touchHandled = true;
           userInteracted = true;
-          document.removeEventListener("touchstart", enableAudio);
+
+          // Try to play all video elements
+          Object.keys(videoElements).forEach(async (videoId) => {
+            const video = videoElements[videoId];
+            if (video && video.paused) {
+              try {
+                video.muted = false;
+                await video.play();
+              } catch (e) {
+                video.muted = true;
+                video.play().catch(() => {});
+              }
+            }
+          });
         },
         { once: true }
       );
@@ -391,15 +423,19 @@
               video.src = marker.content;
               video.setAttribute("crossorigin", "anonymous");
               video.setAttribute("loop", "true");
-              video.playsInline = true;
-              video.setAttribute("webkit-playsinline", "");
-              video.setAttribute("preload", "auto");
-              video.muted = true;
 
-              // iOS specific attributes
+              // CRITICAL iOS attributes
+              video.setAttribute("muted", "true");
+              video.muted = true;
+              video.setAttribute("playsinline", "true");
+              video.playsInline = true;
+              video.setAttribute("webkit-playsinline", "true");
+              video.setAttribute("preload", "metadata");
+              video.setAttribute("autoplay", "false"); // Don't use autoplay attribute
+
+              // iOS specific
               if (isIOS()) {
                 video.setAttribute("x-webkit-airplay", "allow");
-                video.defaultMuted = true;
               }
 
               assets.appendChild(video);
