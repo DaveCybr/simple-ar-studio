@@ -242,7 +242,7 @@
       function getDeviceRotation() {
         const manualRotation = params.get("rotation");
         if (manualRotation) return manualRotation;
-        return isMobileDevice() ? "-90 0 0" : "-90 0 0";
+        return isMobileDevice() ? "-150 0 0" : "-75 0 0";
       }
 
       const deviceRotation = getDeviceRotation();
