@@ -66,51 +66,87 @@
         background: rgba(34, 197, 94, 0.6);
       }
 
-      /* iOS Video Permission Overlay */
-      .video-permission {
+      /* Video Controls - Anchored to center */
+      .video-controls {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1500;
+        display: none;
+        pointer-events: none;
+      }
+      .video-controls.show {
+        display: block;
+      }
+
+      /* Clickable overlay for pause/resume */
+      .video-tap-area {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.95);
+        z-index: 1400;
         display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        z-index: 2000;
-        color: white;
-        font-family: system-ui, -apple-system, sans-serif;
-        padding: 20px;
-        text-align: center;
-      }
-      .video-permission.show {
-        display: flex;
-      }
-      .video-permission h2 {
-        margin: 0 0 10px 0;
-        font-size: 20px;
-      }
-      .video-permission p {
-        margin: 0 0 30px 0;
-        font-size: 14px;
-        color: #aaa;
-        max-width: 300px;
-      }
-      .video-permission button {
-        background: #3b82f6;
-        color: white;
-        border: none;
-        padding: 15px 40px;
-        border-radius: 25px;
-        font-size: 16px;
-        font-weight: 600;
         cursor: pointer;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
       }
-      .video-permission button:active {
-        background: #2563eb;
-        transform: scale(0.98);
+      .video-tap-area.active {
+        display: block;
+      }
+
+      .play-button {
+        width: 80px;
+        height: 80px;
+        background: rgba(59, 130, 246, 0.95);
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
+        transition: all 0.3s ease;
+        pointer-events: all;
+        position: relative;
+      }
+      .play-button:active {
+        transform: scale(0.95);
+        background: rgba(37, 99, 235, 0.95);
+      }
+      .play-button svg {
+        width: 32px;
+        height: 32px;
+        fill: white;
+        margin-left: 4px;
+      }
+
+      /* Pause icon - hidden by default */
+      .pause-icon {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        z-index: 1600;
+        width: 80px;
+        height: 80px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: all 0.3s ease;
+        pointer-events: none;
+      }
+      .pause-icon.show {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+      .pause-icon svg {
+        width: 32px;
+        height: 32px;
+        fill: white;
       }
     </style>
   </head>
@@ -120,16 +156,26 @@
       <p>Memuat AR...</p>
     </div>
 
-    <div class="video-permission" id="videoPermission">
-      <h2>🎬 Aktifkan Video</h2>
-      <p>
-        Tap tombol di bawah untuk mengaktifkan video AR. Ini diperlukan oleh
-        browser Anda.
-      </p>
-      <button id="enableVideoBtn">Aktifkan Video</button>
+    <div class="hint" id="hint">Arahkan kamera ke marker</div>
+
+    <!-- Tap area for pause/resume -->
+    <div class="video-tap-area" id="videoTapArea"></div>
+
+    <!-- Play button (only shows when paused) -->
+    <div class="video-controls" id="videoControls">
+      <button class="play-button" id="playButton">
+        <svg viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </button>
     </div>
 
-    <div class="hint" id="hint">Arahkan kamera ke marker</div>
+    <!-- Pause icon (shows briefly when tapping to pause) -->
+    <div class="pause-icon" id="pauseIcon">
+      <svg viewBox="0 0 24 24">
+        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+      </svg>
+    </div>
 
     <script>
       const params = new URLSearchParams(window.location.search);
@@ -137,8 +183,9 @@
       const projectId = params.get("projectId");
       let markers = [];
       let videoElements = {};
-      let userInteracted = false;
-      let pendingVideos = [];
+      let currentActiveVideo = null;
+      let currentMarkerName = null;
+      let isVideoPlaying = false;
 
       // Check if iOS
       function isIOS() {
@@ -247,102 +294,62 @@
 
       const deviceRotation = getDeviceRotation();
 
-      // iOS Video Handler
-      async function initializeVideo(videoId) {
-        const video = document.getElementById(videoId);
-        if (!video) return false;
+      // Video Control Functions
+      const playButton = document.getElementById("playButton");
+      const videoControls = document.getElementById("videoControls");
+      const videoTapArea = document.getElementById("videoTapArea");
+      const pauseIcon = document.getElementById("pauseIcon");
 
-        try {
-          // CRITICAL: iOS requires muted=true for autoplay
-          //   video.muted = true;
-          //   video.setAttribute("muted", "true");
+      function showPlayButton() {
+        videoControls.classList.add("show");
+        videoTapArea.classList.remove("active");
+        isVideoPlaying = false;
+      }
 
-          // Reset to beginning
-          video.currentTime = 0;
+      function hidePlayButton() {
+        videoControls.classList.remove("show");
+        videoTapArea.classList.add("active");
+        isVideoPlaying = true;
+      }
 
-          // Try to play (muted)
-          const playPromise = video.play();
+      function showPauseIconBriefly() {
+        pauseIcon.classList.add("show");
+        setTimeout(() => {
+          pauseIcon.classList.remove("show");
+        }, 600);
+      }
 
-          if (playPromise !== undefined) {
-            await playPromise;
-            console.log(`✅ Video ${videoId} playing (muted)`);
-
-            // Try to unmute after a delay if user interacted
-            if (userInteracted) {
-              setTimeout(() => {
-                // video.muted = false;
-                video.play().catch(() => {
-                  console.log("Could not unmute, keeping muted");
-                  //   video.muted = true;
-                });
-              }, 500);
+      async function playVideo() {
+        if (currentActiveVideo) {
+          const video = document.getElementById(currentActiveVideo);
+          if (video) {
+            try {
+              video.currentTime = 0;
+              await video.play();
+              hidePlayButton();
+            } catch (error) {
+              console.error("Play error:", error);
             }
           }
-
-          return true;
-        } catch (error) {
-          console.log(`❌ Video ${videoId} error:`, error.message);
-
-          // Show permission overlay if needed
-          if (!userInteracted) {
-            if (!pendingVideos.includes(videoId)) {
-              pendingVideos.push(videoId);
-            }
-            document.getElementById("videoPermission").classList.add("show");
-          }
-
-          return false;
         }
       }
 
-      // Handle user interaction for iOS
-      document
-        .getElementById("enableVideoBtn")
-        ?.addEventListener("click", async () => {
-          userInteracted = true;
-          document.getElementById("videoPermission").classList.remove("show");
-
-          // Initialize all pending videos
-          for (const videoId of pendingVideos) {
-            const video = document.getElementById(videoId);
-            if (video) {
-              try {
-                // video.muted = true;
-                await video.play();
-                console.log(`✅ Started ${videoId} after interaction`);
-              } catch (e) {
-                console.log(`❌ Still failed ${videoId}:`, e.message);
-              }
-            }
+      function pauseVideo() {
+        if (currentActiveVideo) {
+          const video = document.getElementById(currentActiveVideo);
+          if (video && !video.paused) {
+            video.pause();
+            showPauseIconBriefly();
+            showPlayButton();
           }
-          pendingVideos = [];
-        });
+        }
+      }
 
-      // Handle any touch to enable audio
-      let touchHandled = false;
-      document.addEventListener(
-        "touchstart",
-        async function enableAudio() {
-          if (touchHandled) return;
-          touchHandled = true;
-          userInteracted = true;
+      // Play button click
+      playButton.addEventListener("click", playVideo);
 
-          // Try to play all video elements
-          Object.keys(videoElements).forEach(async (videoId) => {
-            const video = videoElements[videoId];
-            if (video && video.paused) {
-              try {
-                // video.muted = false;
-                await video.play();
-              } catch (e) {
-                // video.muted = true;
-                video.play().catch(() => {});
-              }
-            }
-          });
-        },
-        { once: true }
-      );
+      // Tap anywhere to pause when video is playing
+      videoTapArea.addEventListener("click", pauseVideo);
 
       if (markersParam) {
         try {
@@ -354,7 +361,7 @@
 
       if (markers.length === 0) {
         document.getElementById("loading").innerHTML =
-          '<p style="color: #ef4444;">Error: Marker tidak ditemukan</p>';
+          '<p style="color: #ef4444; text-align: center; padding: 20px;">❌ Marker tidak ditemukan<br><small style="color: #999;">Periksa URL atau hubungi admin</small></p>';
       } else {
         function createARJSScene() {
           const scene = document.createElement("a-scene");
@@ -406,8 +413,8 @@
             markerEntity.setAttribute("smoothTolerance", "0.05");
             markerEntity.setAttribute("smoothThreshold", "5");
 
-            const scale = marker.scale || 1;
-            const baseHeight = 2.0 * scale;
+            const scale = marker.scale;
+            const baseHeight = 1.5 * scale;
             const baseWidth = (9 / 16) * baseHeight;
 
             if (marker.type === "video") {
@@ -423,15 +430,10 @@
               video.src = marker.content;
               video.setAttribute("crossorigin", "anonymous");
               video.setAttribute("loop", "true");
-
-              // CRITICAL iOS attributes
-              //   video.setAttribute("muted", "true");
-              //   video.muted = true;
               video.setAttribute("playsinline", "true");
               video.playsInline = true;
               video.setAttribute("webkit-playsinline", "true");
               video.setAttribute("preload", "metadata");
-              video.setAttribute("autoplay", "false"); // Don't use autoplay attribute
 
               // iOS specific
               if (isIOS()) {
@@ -475,7 +477,11 @@
 
               if (marker.type === "video") {
                 const videoId = `arjs-video-${index}`;
-                await initializeVideo(videoId);
+                currentActiveVideo = videoId;
+                currentMarkerName = marker.name;
+
+                // Show play button
+                showPlayButton();
               }
             });
 
@@ -492,8 +498,15 @@
                 if (video) {
                   video.pause();
                   video.currentTime = 0;
-                  //   video.muted = true;
                 }
+
+                // Hide all controls
+                videoControls.classList.remove("show");
+                videoTapArea.classList.remove("active");
+                pauseIcon.classList.remove("show");
+                currentActiveVideo = null;
+                currentMarkerName = null;
+                isVideoPlaying = false;
               }
             });
 
@@ -504,19 +517,6 @@
 
           setTimeout(() => {
             document.getElementById("loading").classList.add("hidden");
-
-            // Show permission overlay on iOS if there are videos
-            if (
-              isIOS() &&
-              Object.keys(videoElements).length > 0 &&
-              !userInteracted
-            ) {
-              setTimeout(() => {
-                document
-                  .getElementById("videoPermission")
-                  .classList.add("show");
-              }, 500);
-            }
           }, 2000);
         }
 
