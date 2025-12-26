@@ -65,8 +65,10 @@
       .hint.found {
         background: rgba(34, 197, 94, 0.6);
       }
+      .hint.error {
+        background: rgba(239, 68, 68, 0.8);
+      }
 
-      /* Video Controls - Anchored to center */
       .video-controls {
         position: fixed;
         top: 50%;
@@ -80,7 +82,6 @@
         display: block;
       }
 
-      /* Clickable overlay for pause/resume */
       .video-tap-area {
         position: fixed;
         top: 0;
@@ -121,7 +122,6 @@
         margin-left: 4px;
       }
 
-      /* Pause icon - hidden by default */
       .pause-icon {
         position: fixed;
         top: 50%;
@@ -154,14 +154,16 @@
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <p>Memuat AR...</p>
+      <p
+        id="resolutionInfo"
+        style="font-size: 10px; color: #888; margin-top: 10px"
+      ></p>
     </div>
 
     <div class="hint" id="hint">Arahkan kamera ke marker</div>
 
-    <!-- Tap area for pause/resume -->
     <div class="video-tap-area" id="videoTapArea"></div>
 
-    <!-- Play button (only shows when paused) -->
     <div class="video-controls" id="videoControls">
       <button class="play-button" id="playButton">
         <svg viewBox="0 0 24 24">
@@ -170,7 +172,6 @@
       </button>
     </div>
 
-    <!-- Pause icon (shows briefly when tapping to pause) -->
     <div class="pause-icon" id="pauseIcon">
       <svg viewBox="0 0 24 24">
         <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
@@ -178,6 +179,18 @@
     </div>
 
     <script>
+      const originalError = console.error;
+      console.error = function (...args) {
+        const errorMsg = args.join(" ");
+        if (
+          errorMsg.includes("changeMatrixMode") ||
+          errorMsg.includes("WebXR session support")
+        ) {
+          return;
+        }
+        originalError.apply(console, args);
+      };
+
       const params = new URLSearchParams(window.location.search);
       const markersParam = params.get("markers");
       const projectId = params.get("projectId");
@@ -187,12 +200,10 @@
       let currentMarkerName = null;
       let isVideoPlaying = false;
 
-      // Check if iOS
       function isIOS() {
         return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
       }
 
-      // Analytics Tracking Class
       class ARAnalytics {
         constructor(projectId) {
           this.projectId = projectId;
@@ -292,9 +303,61 @@
         return isMobileDevice() ? "-150 0 0" : "-75 0 0";
       }
 
-      const deviceRotation = getDeviceRotation();
+      function getOptimalResolution() {
+        const ua = navigator.userAgent.toLowerCase();
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const pixelRatio = window.devicePixelRatio || 1;
 
-      // Video Control Functions
+        // Check for high-end devices
+        const isHighEnd = pixelRatio >= 2 && (width >= 1080 || height >= 1080);
+
+        // Desktop/Laptop
+        if (!isMobileDevice()) {
+          return { width: 1280, height: 720 }; // HD untuk desktop
+        }
+
+        // Tablet
+        if (/ipad|tablet/i.test(ua) || (width >= 768 && height >= 1024)) {
+          return isHighEnd
+            ? { width: 1280, height: 720 } // HD untuk tablet high-end
+            : { width: 800, height: 600 }; // Medium untuk tablet biasa
+        }
+
+        // High-end smartphones (iPhone 12+, Samsung S20+, etc)
+        if (
+          isHighEnd &&
+          (width >= 390 ||
+            /iphone 1[2-9]|iphone [2-9][0-9]|galaxy s2[0-9]|pixel [6-9]/i.test(
+              ua
+            ))
+        ) {
+          return { width: 960, height: 720 }; // Medium-high untuk flagship phones
+        }
+
+        // Mid-range smartphones
+        if (pixelRatio >= 2 || width >= 375) {
+          return { width: 640, height: 480 }; // Standard untuk mid-range
+        }
+
+        // Low-end smartphones
+        return { width: 480, height: 360 }; // Ringan untuk low-end
+      }
+
+      const deviceRotation = getDeviceRotation();
+      const optimalResolution = getOptimalResolution();
+
+      // Show resolution info to user
+      const resolutionInfo = document.getElementById("resolutionInfo");
+      if (resolutionInfo) {
+        const deviceType = isMobileDevice()
+          ? /ipad|tablet/i.test(navigator.userAgent.toLowerCase())
+            ? "Tablet"
+            : "Mobile"
+          : "Desktop";
+        resolutionInfo.textContent = `${deviceType} • ${optimalResolution.width}x${optimalResolution.height}`;
+      }
+
       const playButton = document.getElementById("playButton");
       const videoControls = document.getElementById("videoControls");
       const videoTapArea = document.getElementById("videoTapArea");
@@ -329,6 +392,9 @@
               hidePlayButton();
             } catch (error) {
               console.error("Play error:", error);
+              const hint = document.getElementById("hint");
+              hint.textContent = "Error playing video";
+              hint.classList.add("error");
             }
           }
         }
@@ -345,10 +411,7 @@
         }
       }
 
-      // Play button click
       playButton.addEventListener("click", playVideo);
-
-      // Tap anywhere to pause when video is playing
       videoTapArea.addEventListener("click", pauseVideo);
 
       if (markersParam) {
@@ -363,6 +426,10 @@
         document.getElementById("loading").innerHTML =
           '<p style="color: #ef4444; text-align: center; padding: 20px;">❌ Marker tidak ditemukan<br><small style="color: #999;">Periksa URL atau hubungi admin</small></p>';
       } else {
+        window.addEventListener("load", function () {
+          setTimeout(createARJSScene, 500);
+        });
+
         function createARJSScene() {
           const scene = document.createElement("a-scene");
 
@@ -375,9 +442,10 @@
               "matrixCodeType: 3x3; " +
               "trackingMethod: best; " +
               "maxDetectionRate: 60; " +
-              "canvasWidth: 640; " +
-              "canvasHeight: 480;"
+              `canvasWidth: ${optimalResolution.width}; ` +
+              `canvasHeight: ${optimalResolution.height};`
           );
+
           scene.setAttribute("vr-mode-ui", "enabled: false");
           scene.setAttribute(
             "renderer",
@@ -435,7 +503,6 @@
               video.setAttribute("webkit-playsinline", "true");
               video.setAttribute("preload", "metadata");
 
-              // iOS specific
               if (isIOS()) {
                 video.setAttribute("x-webkit-airplay", "allow");
               }
@@ -479,8 +546,6 @@
                 const videoId = `arjs-video-${index}`;
                 currentActiveVideo = videoId;
                 currentMarkerName = marker.name;
-
-                // Show play button
                 showPlayButton();
               }
             });
@@ -500,7 +565,6 @@
                   video.currentTime = 0;
                 }
 
-                // Hide all controls
                 videoControls.classList.remove("show");
                 videoTapArea.classList.remove("active");
                 pauseIcon.classList.remove("show");
@@ -519,8 +583,6 @@
             document.getElementById("loading").classList.add("hidden");
           }, 2000);
         }
-
-        createARJSScene();
       }
     </script>
   </body>
