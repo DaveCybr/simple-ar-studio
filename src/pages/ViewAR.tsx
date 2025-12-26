@@ -1,4 +1,4 @@
-// src/pages/ViewAR.tsx - Updated with dual library support
+// src/pages/ViewAR.tsx - Updated with analytics tracking
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -129,6 +129,10 @@ const ViewAR = () => {
   let markersParam: string;
   let viewerUrl: string;
 
+  // ✅ NEW: Get Supabase credentials from environment
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
   if (project.library === "mindar") {
     // MindAR format
     markersParam = encodeURIComponent(
@@ -142,7 +146,16 @@ const ViewAR = () => {
         }))
       )
     );
-    viewerUrl = `/ar-viewer.html?markers=${markersParam}`;
+
+    // ✅ UPDATED: Add projectId for analytics tracking
+    const params = new URLSearchParams({
+      markers: markersParam,
+      projectId: project.id,
+      supabaseUrl: supabaseUrl,
+      supabaseKey: supabaseKey,
+    });
+
+    viewerUrl = `/ar-viewer.html?${params.toString()}`;
   } else {
     // AR.js format
     markersParam = encodeURIComponent(
@@ -156,8 +169,16 @@ const ViewAR = () => {
         }))
       )
     );
-    viewerUrl = `/arjs-viewer.html?markers=${markersParam}`;
-    // viewerUrl = `/ar-debug.html?markers=${markersParam}`;
+
+    // ✅ UPDATED: Add projectId for analytics tracking
+    const params = new URLSearchParams({
+      markers: markersParam,
+      projectId: project.id,
+      supabaseUrl: supabaseUrl,
+      supabaseKey: supabaseKey,
+    });
+
+    viewerUrl = `/arjs-viewer.html?${params.toString()}`;
   }
 
   return (
@@ -168,46 +189,6 @@ const ViewAR = () => {
         allow="camera; gyroscope; accelerometer; autoplay"
         title={`AR Viewer - ${project.name}`}
       />
-
-      {/* Header Overlay */}
-      {/* <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between gap-2">
-        <Link to="/">
-          <Button variant="secondary" size="sm">
-            <Home className="w-4 h-4 mr-2" />
-            Beranda
-          </Button>
-        </Link>
-
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="secondary"
-            className="backdrop-blur-sm bg-background/80"
-          >
-            {project.library === "mindar" ? (
-              <>
-                <Scan className="w-3 h-3 mr-1" />
-                MindAR
-              </>
-            ) : (
-              <>
-                <QrCode className="w-3 h-3 mr-1" />
-                AR.js
-              </>
-            )}
-          </Badge>
-
-          <div className="bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-sm font-medium border">
-            {project.name}
-          </div>
-
-          <Badge
-            variant="outline"
-            className="backdrop-blur-sm bg-background/80"
-          >
-            {project.markers.length} marker
-          </Badge>
-        </div>
-      </div> */}
     </div>
   );
 };

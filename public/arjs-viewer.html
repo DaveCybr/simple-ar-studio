@@ -68,7 +68,6 @@
       .hint.error {
         background: rgba(239, 68, 68, 0.8);
       }
-
       .video-controls {
         position: fixed;
         top: 50%;
@@ -81,7 +80,6 @@
       .video-controls.show {
         display: block;
       }
-
       .video-tap-area {
         position: fixed;
         top: 0;
@@ -95,7 +93,6 @@
       .video-tap-area.active {
         display: block;
       }
-
       .play-button {
         width: 80px;
         height: 80px;
@@ -109,7 +106,6 @@
         box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
         transition: all 0.3s ease;
         pointer-events: all;
-        position: relative;
       }
       .play-button:active {
         transform: scale(0.95);
@@ -121,7 +117,6 @@
         fill: white;
         margin-left: 4px;
       }
-
       .pause-icon {
         position: fixed;
         top: 50%;
@@ -161,52 +156,23 @@
     </div>
 
     <div class="hint" id="hint">Arahkan kamera ke marker</div>
-
     <div class="video-tap-area" id="videoTapArea"></div>
-
     <div class="video-controls" id="videoControls">
       <button class="play-button" id="playButton">
-        <svg viewBox="0 0 24 24">
-          <path d="M8 5v14l11-7z" />
-        </svg>
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
       </button>
     </div>
-
     <div class="pause-icon" id="pauseIcon">
-      <svg viewBox="0 0 24 24">
-        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-      </svg>
+      <svg viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
     </div>
 
     <script>
-      const originalError = console.error;
-      console.error = function (...args) {
-        const errorMsg = args.join(" ");
-        if (
-          errorMsg.includes("changeMatrixMode") ||
-          errorMsg.includes("WebXR session support")
-        ) {
-          return;
-        }
-        originalError.apply(console, args);
-      };
-
-      const params = new URLSearchParams(window.location.search);
-      const markersParam = params.get("markers");
-      const projectId = params.get("projectId");
-      let markers = [];
-      let videoElements = {};
-      let currentActiveVideo = null;
-      let currentMarkerName = null;
-      let isVideoPlaying = false;
-
-      function isIOS() {
-        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-      }
-
+      // ============ FIXED ANALYTICS CLASS ============
       class ARAnalytics {
-        constructor(projectId) {
-          this.projectId = projectId;
+        constructor(projectId, supabaseUrl, supabaseAnonKey) {
+          this.projectId = projectId; // Now expects UUID from ar_projects
+          this.supabaseUrl = supabaseUrl;
+          this.supabaseAnonKey = supabaseAnonKey;
           this.sessionId = `${Date.now()}-${Math.random()
             .toString(36)
             .substr(2, 9)}`;
@@ -224,21 +190,50 @@
         }
 
         async trackEvent(eventType, data = {}) {
+          if (!this.supabaseUrl || !this.supabaseAnonKey) {
+            console.warn(
+              "[Analytics] Missing Supabase credentials, skipping tracking"
+            );
+            return;
+          }
+
+          const payload = {
+            project_id: this.projectId, // UUID - will auto-populate user_id via trigger
+            session_id: this.sessionId,
+            event_type: eventType,
+            device_type: this.deviceType,
+            user_agent: navigator.userAgent,
+            marker_name: data.marker_name || null,
+            duration: data.duration || null,
+            metadata: data.metadata || {},
+            // Note: user_id, ip_address, country, city will be set by trigger/edge function
+          };
+
+          // console.log("[Analytics] Tracking event:", eventType, payload);
+
           try {
-            await fetch("/api/analytics", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                project_id: this.projectId,
-                session_id: this.sessionId,
-                event_type: eventType,
-                device_type: this.deviceType,
-                user_agent: navigator.userAgent,
-                ...data,
-              }),
-            });
+            const response = await fetch(
+              `${this.supabaseUrl}/rest/v1/ar_analytics`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: this.supabaseAnonKey,
+                  Authorization: `Bearer ${this.supabaseAnonKey}`,
+                  Prefer: "return=minimal",
+                },
+                body: JSON.stringify(payload),
+              }
+            );
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error("[Analytics] Failed:", response.status, errorText);
+            } else {
+              // console.log("[Analytics] Success:", eventType);
+            }
           } catch (error) {
-            console.error("Analytics error:", error);
+            console.error("[Analytics] Error:", error);
           }
         }
 
@@ -259,7 +254,7 @@
             );
             this.trackEvent("marker_lost", {
               marker_name: markerName,
-              duration,
+              duration: duration,
             });
             delete this.markerTimes[markerName];
           }
@@ -268,8 +263,8 @@
         trackSessionEnd() {
           const duration = Math.floor((Date.now() - this.sessionStart) / 1000);
           this.trackEvent("session_end", {
-            duration,
-            total_scans: this.scanCount,
+            duration: duration,
+            metadata: { total_scans: this.scanCount },
           });
         }
 
@@ -282,8 +277,50 @@
         }
       }
 
-      const analytics = projectId ? new ARAnalytics(projectId) : null;
-      if (analytics) analytics.init();
+      // Suppress AR.js errors
+      const originalError = console.error;
+      console.error = function (...args) {
+        const errorMsg = args.join(" ");
+        if (
+          errorMsg.includes("changeMatrixMode") ||
+          errorMsg.includes("WebXR session support")
+        ) {
+          return;
+        }
+        originalError.apply(console, args);
+      };
+
+      // Get parameters from URL
+      const params = new URLSearchParams(window.location.search);
+      const markersParam = params.get("markers");
+      const projectId = params.get("projectId"); // UUID from ar_projects table
+
+      // ✅ FIXED: Removed import.meta.env references
+      const supabaseUrl =
+        params.get("supabaseUrl") || "https://fsxekfbmglzwdurayzsd.supabase.co";
+      const supabaseAnonKey =
+        params.get("supabaseKey") ||
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzeGVrZmJtZ2x6d2R1cmF5enNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ0ODMyMTUsImV4cCI6MjA1MDA1OTIxNX0.wGfRH0Gx5ADbzkqIlKvQTZVKy99hLYu-HO2kwuTzwNA";
+
+      let markers = [];
+      let videoElements = {};
+      let currentActiveVideo = null;
+      let currentMarkerName = null;
+      let isVideoPlaying = false;
+
+      // ✅ Initialize analytics with proper credentials
+      const analytics = projectId
+        ? new ARAnalytics(projectId, supabaseUrl, supabaseAnonKey)
+        : null;
+      if (analytics) {
+        analytics.init();
+      } else {
+        console.warn("[Analytics] No projectId provided, analytics disabled");
+      }
+
+      function isIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      }
 
       function isMobileDevice() {
         const ua = navigator.userAgent.toLowerCase();
@@ -308,23 +345,16 @@
         const width = window.innerWidth;
         const height = window.innerHeight;
         const pixelRatio = window.devicePixelRatio || 1;
-
-        // Check for high-end devices
         const isHighEnd = pixelRatio >= 2 && (width >= 1080 || height >= 1080);
 
-        // Desktop/Laptop
         if (!isMobileDevice()) {
-          return { width: 1280, height: 720 }; // HD untuk desktop
+          return { width: 1280, height: 720 };
         }
-
-        // Tablet
         if (/ipad|tablet/i.test(ua) || (width >= 768 && height >= 1024)) {
           return isHighEnd
-            ? { width: 1280, height: 720 } // HD untuk tablet high-end
-            : { width: 800, height: 600 }; // Medium untuk tablet biasa
+            ? { width: 1280, height: 720 }
+            : { width: 800, height: 600 };
         }
-
-        // High-end smartphones (iPhone 12+, Samsung S20+, etc)
         if (
           isHighEnd &&
           (width >= 390 ||
@@ -332,22 +362,17 @@
               ua
             ))
         ) {
-          return { width: 960, height: 720 }; // Medium-high untuk flagship phones
+          return { width: 960, height: 720 };
         }
-
-        // Mid-range smartphones
         if (pixelRatio >= 2 || width >= 375) {
-          return { width: 640, height: 480 }; // Standard untuk mid-range
+          return { width: 640, height: 480 };
         }
-
-        // Low-end smartphones
-        return { width: 480, height: 360 }; // Ringan untuk low-end
+        return { width: 480, height: 360 };
       }
 
       const deviceRotation = getDeviceRotation();
       const optimalResolution = getOptimalResolution();
 
-      // Show resolution info to user
       const resolutionInfo = document.getElementById("resolutionInfo");
       if (resolutionInfo) {
         const deviceType = isMobileDevice()
@@ -377,9 +402,7 @@
 
       function showPauseIconBriefly() {
         pauseIcon.classList.add("show");
-        setTimeout(() => {
-          pauseIcon.classList.remove("show");
-        }, 600);
+        setTimeout(() => pauseIcon.classList.remove("show"), 600);
       }
 
       async function playVideo() {
@@ -432,20 +455,11 @@
 
         function createARJSScene() {
           const scene = document.createElement("a-scene");
-
           scene.setAttribute("embedded", "");
           scene.setAttribute(
             "arjs",
-            "sourceType: webcam; " +
-              "debugUIEnabled: false; " +
-              "detectionMode: mono_and_matrix; " +
-              "matrixCodeType: 3x3; " +
-              "trackingMethod: best; " +
-              "maxDetectionRate: 60; " +
-              `canvasWidth: ${optimalResolution.width}; ` +
-              `canvasHeight: ${optimalResolution.height};`
+            `sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; maxDetectionRate: 60; canvasWidth: ${optimalResolution.width}; canvasHeight: ${optimalResolution.height};`
           );
-
           scene.setAttribute("vr-mode-ui", "enabled: false");
           scene.setAttribute(
             "renderer",

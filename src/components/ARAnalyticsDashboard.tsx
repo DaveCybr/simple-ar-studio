@@ -1,4 +1,4 @@
-// src/components/ARAnalyticsDashboard.tsx
+// src/components/ARAnalyticsDashboard.tsx - Fixed for UUID project_id
 import { useEffect, useState } from "react";
 import {
   Card,
@@ -16,7 +16,6 @@ import {
   TrendingUp,
   MapPin,
   Smartphone,
-  Calendar,
   Activity,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -47,7 +46,7 @@ interface AnalyticsData {
 }
 
 interface ARAnalyticsDashboardProps {
-  projectId?: string;
+  projectId?: string; // Now expects UUID from ar_projects
 }
 
 export const ARAnalyticsDashboard = ({
@@ -78,46 +77,53 @@ export const ARAnalyticsDashboard = ({
         startDate = new Date(0); // All time
       }
 
-      // Fetch analytics data
+      // ✅ FIXED: Query without explicit user_id (RLS handles it)
       let query = supabase
         .from("ar_analytics")
         .select("*")
-        .eq("user_id", user?.id)
-        .gte("created_at", startDate.toISOString());
+        .gte("created_at", startDate.toISOString())
+        .order("created_at", { ascending: false });
 
+      // Filter by project if specified
       if (projectId) {
         query = query.eq("project_id", projectId);
       }
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error("Analytics fetch error:", error);
+        throw error;
+      }
 
       // Process data
       const processed = processAnalyticsData(data || []);
       setAnalytics(processed);
     } catch (error) {
-      console.error("Analytics fetch error:", error);
+      console.error("Analytics error:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const processAnalyticsData = (data: any[]): AnalyticsData => {
-    // Group by date
+    // Group by date with proper formatting
     const scansByDate = data.reduce((acc: any, item) => {
-      const date = new Date(item.created_at).toLocaleDateString("id-ID");
+      const date = new Date(item.created_at).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
       acc[date] = (acc[date] || 0) + 1;
       return acc;
     }, {});
 
-    // Top markers
-    const markerScans = data.reduce((acc: any, item) => {
-      if (item.marker_name) {
+    // Top markers - only count 'scan' events
+    const markerScans = data
+      .filter((item) => item.event_type === "scan" && item.marker_name)
+      .reduce((acc: any, item) => {
         acc[item.marker_name] = (acc[item.marker_name] || 0) + 1;
-      }
-      return acc;
-    }, {});
+        return acc;
+      }, {});
 
     const topMarkers = Object.entries(markerScans)
       .map(([name, scans]) => ({ name, scans: scans as number }))
@@ -134,36 +140,47 @@ export const ARAnalyticsDashboard = ({
       { mobile: 0, desktop: 0, tablet: 0 }
     );
 
-    // Calculate avg duration
-    const durations = data.filter((d) => d.duration).map((d) => d.duration);
+    // Calculate avg duration (only for marker_lost events with duration)
+    const durations = data
+      .filter((d) => d.event_type === "marker_lost" && d.duration)
+      .map((d) => d.duration);
     const avgDuration =
       durations.length > 0
-        ? durations.reduce((a, b) => a + b, 0) / durations.length
+        ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
         : 0;
 
-    // Unique users
+    // Unique users (based on session_id)
     const uniqueUsers = new Set(data.map((d) => d.session_id)).size;
 
-    // Location data (mock for now, need IP geolocation)
-    const locationData = [
-      { country: "Indonesia", count: Math.floor(data.length * 0.8) },
-      { country: "Malaysia", count: Math.floor(data.length * 0.1) },
-      { country: "Singapore", count: Math.floor(data.length * 0.05) },
-      { country: "Others", count: Math.floor(data.length * 0.05) },
-    ];
+    // Location data - use actual data if available
+    const countryData = data.reduce((acc: any, item) => {
+      const country = item.country || "Unknown";
+      acc[country] = (acc[country] || 0) + 1;
+      return acc;
+    }, {});
+
+    const locationData = Object.entries(countryData)
+      .map(([country, count]) => ({ country, count: count as number }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     return {
       totalViews: data.filter((d) => d.event_type === "view").length,
       totalScans: data.filter((d) => d.event_type === "scan").length,
-      avgDuration: Math.round(avgDuration),
+      avgDuration,
       uniqueUsers,
       topMarkers,
-      scansByDate: Object.entries(scansByDate).map(([date, count]) => ({
-        date,
-        count: count as number,
-      })),
+      scansByDate: Object.entries(scansByDate)
+        .map(([date, count]) => ({
+          date,
+          count: count as number,
+        }))
+        .reverse(), // Show oldest first
       deviceBreakdown,
-      locationData,
+      locationData:
+        locationData.length > 0
+          ? locationData
+          : [{ country: "No data", count: 0 }],
     };
   };
 
@@ -239,7 +256,7 @@ export const ARAnalyticsDashboard = ({
           <CardContent>
             <div className="text-2xl font-bold">{analytics.avgDuration}s</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Average session time
+              Average viewing time
             </p>
           </CardContent>
         </Card>
@@ -299,66 +316,36 @@ export const ARAnalyticsDashboard = ({
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="h-4 w-4" />
-                  <span>Mobile</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {analytics.deviceBreakdown.mobile}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    (
-                    {Math.round(
-                      (analytics.deviceBreakdown.mobile /
-                        (analytics.totalViews || 1)) *
-                        100
-                    )}
-                    %)
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="h-4 w-4" />
-                  <span>Tablet</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {analytics.deviceBreakdown.tablet}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    (
-                    {Math.round(
-                      (analytics.deviceBreakdown.tablet /
-                        (analytics.totalViews || 1)) *
-                        100
-                    )}
-                    %)
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="h-4 w-4" />
-                  <span>Desktop</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {analytics.deviceBreakdown.desktop}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    (
-                    {Math.round(
-                      (analytics.deviceBreakdown.desktop /
-                        (analytics.totalViews || 1)) *
-                        100
-                    )}
-                    %)
-                  </span>
-                </div>
-              </div>
+              {["mobile", "tablet", "desktop"].map((deviceType) => {
+                const count =
+                  analytics.deviceBreakdown[
+                    deviceType as keyof typeof analytics.deviceBreakdown
+                  ];
+                const total = Object.values(analytics.deviceBreakdown).reduce(
+                  (a, b) => a + b,
+                  0
+                );
+                const percentage =
+                  total > 0 ? Math.round((count / total) * 100) : 0;
+
+                return (
+                  <div
+                    key={deviceType}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="h-4 w-4" />
+                      <span className="capitalize">{deviceType}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{count}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({percentage}%)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -372,11 +359,12 @@ export const ARAnalyticsDashboard = ({
           <CardContent>
             <div className="space-y-2">
               {analytics.scansByDate.length > 0 ? (
-                analytics.scansByDate.map((item, index) => {
+                analytics.scansByDate.slice(-10).map((item, index) => {
                   const maxScans = Math.max(
                     ...analytics.scansByDate.map((d) => d.count)
                   );
-                  const percentage = (item.count / maxScans) * 100;
+                  const percentage =
+                    maxScans > 0 ? (item.count / maxScans) * 100 : 0;
 
                   return (
                     <div key={index} className="space-y-1">
@@ -384,7 +372,7 @@ export const ARAnalyticsDashboard = ({
                         <span className="text-muted-foreground">
                           {item.date}
                         </span>
-                        <span className="font-medium">{item.count} scans</span>
+                        <span className="font-medium">{item.count} events</span>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
                         <div
@@ -408,7 +396,7 @@ export const ARAnalyticsDashboard = ({
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Geographic Distribution</CardTitle>
-            <CardDescription>Scans by location</CardDescription>
+            <CardDescription>Activity by location</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -418,7 +406,7 @@ export const ARAnalyticsDashboard = ({
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <span>{location.country}</span>
                   </div>
-                  <Badge variant="secondary">{location.count} scans</Badge>
+                  <Badge variant="secondary">{location.count} events</Badge>
                 </div>
               ))}
             </div>
