@@ -1,4 +1,4 @@
-// src/components/ARProjectList.tsx - Cleaned up (Analytics handled in ARProjectActions)
+// src/components/ARProjectList.tsx - Dengan fitur download markers
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,8 @@ import {
   QrCode,
   Calendar,
   Scan,
-  Image as ImageIcon,
+  Download,
+  DownloadCloud,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,6 +45,8 @@ export const ARProjectList = ({
   const { user } = useAuth();
   const [projects, setProjects] = useState<ARProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{
     open: boolean;
     project: ARProject | null;
@@ -96,7 +99,81 @@ export const ARProjectList = ({
     setLoading(false);
   };
 
-  // ✅ Generate fallback icon based on marker type
+  // Download single marker
+  const downloadMarker = async (
+    marker: ARProject["markers"][0],
+    projectName: string
+  ) => {
+    if (!marker.marker_url) {
+      alert("Marker ini tidak memiliki gambar untuk didownload");
+      return;
+    }
+
+    setDownloading(marker.id);
+    try {
+      const response = await fetch(marker.marker_url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${projectName}_${marker.name.replace(
+        /\s+/g,
+        "_"
+      )}_marker.jpg`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Error downloading marker:", error);
+      alert("Gagal mendownload marker. Silakan coba lagi.");
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  // Download all markers in a project
+  const downloadAllMarkers = async (project: ARProject) => {
+    const markersWithImages = project.markers.filter((m) => m.marker_url);
+
+    if (markersWithImages.length === 0) {
+      alert("Project ini tidak memiliki marker dengan gambar untuk didownload");
+      return;
+    }
+
+    setDownloadingAll(project.id);
+
+    try {
+      for (const marker of markersWithImages) {
+        const response = await fetch(marker.marker_url!);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `${project.name}_${marker.name.replace(
+          /\s+/g,
+          "_"
+        )}_marker.jpg`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+
+        // Small delay between downloads
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch (error) {
+      console.error("Error downloading markers:", error);
+      alert("Gagal mendownload beberapa marker. Silakan coba lagi.");
+    } finally {
+      setDownloadingAll(null);
+    }
+  };
+
   const getMarkerFallback = (marker: ARProject["markers"][0]) => {
     if (marker.library === "arjs") {
       const markerType = marker.marker_data?.markerType;
@@ -176,18 +253,40 @@ export const ARProjectList = ({
                 {project.markers.slice(0, 4).map((marker, idx) => (
                   <div
                     key={marker.id}
-                    className={`relative overflow-hidden ${
+                    className={`relative overflow-hidden group ${
                       project.markers.length === 3 && idx === 2
                         ? "col-span-2"
                         : ""
                     }`}
                   >
                     {marker.marker_url ? (
-                      <img
-                        src={marker.marker_url}
-                        alt={marker.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <>
+                        <img
+                          src={marker.marker_url}
+                          alt={marker.name}
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Hover overlay dengan download button */}
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadMarker(marker, project.name);
+                            }}
+                            disabled={downloading === marker.id}
+                          >
+                            <Download
+                              className={`w-4 h-4 ${
+                                downloading === marker.id
+                                  ? "animate-bounce"
+                                  : ""
+                              }`}
+                            />
+                          </Button>
+                        </div>
+                      </>
                     ) : (
                       getMarkerFallback(marker)
                     )}
@@ -232,6 +331,21 @@ export const ARProjectList = ({
               >
                 <QrCode className="w-4 h-4" />
               </Button>
+              {project.markers.some((m) => m.marker_url) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadAllMarkers(project)}
+                  disabled={downloadingAll === project.id}
+                  title="Download semua markers"
+                >
+                  <DownloadCloud
+                    className={`w-4 h-4 ${
+                      downloadingAll === project.id ? "animate-bounce" : ""
+                    }`}
+                  />
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
