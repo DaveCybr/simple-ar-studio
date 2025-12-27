@@ -1,9 +1,10 @@
-// src/pages/ViewAR.tsx - Updated with analytics tracking
+// src/pages/ViewAR.tsx - Fixed version
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle, Home } from "lucide-react";
+import { ENV } from "@/lib/constants";
 
 interface ARMarker {
   id: string;
@@ -23,11 +24,13 @@ interface ARProject {
   markers: ARMarker[];
 }
 
+// ✅ FIXED: Remove async from component declaration
 const ViewAR = () => {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<ARProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewerUrl, setViewerUrl] = useState<string>("");
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -37,60 +40,146 @@ const ViewAR = () => {
         return;
       }
 
-      // Fetch project
-      const { data: projectData, error: projectError } = await supabase
-        .from("ar_projects")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
-
-      if (projectData) {
-        // Fetch markers
-        const { data: markersData, error: markersError } = await supabase
-          .from("ar_content")
+      try {
+        // Fetch project
+        const { data: projectData, error: projectError } = await supabase
+          .from("ar_projects")
           .select("*")
-          .eq("project_id", id);
+          .eq("id", id)
+          .maybeSingle();
 
-        if (markersError || !markersData || markersData.length === 0) {
-          setError("Tidak ada marker dalam project ini");
+        if (projectData) {
+          // Fetch markers
+          const { data: markersData, error: markersError } = await supabase
+            .from("ar_content")
+            .select("*")
+            .eq("project_id", id);
+
+          if (markersError || !markersData || markersData.length === 0) {
+            setError("Tidak ada marker dalam project ini");
+            setLoading(false);
+            return;
+          }
+
+          const projectObj: ARProject = {
+            id: projectData.id,
+            name: projectData.name,
+            library: projectData.library || "mindar",
+            markers: markersData,
+          };
+
+          setProject(projectObj);
+
+          // ✅ Generate viewer URL after project is loaded
+          await generateViewerUrl(projectObj);
           setLoading(false);
           return;
         }
 
-        setProject({
-          id: projectData.id,
-          name: projectData.name,
-          library: projectData.library || "mindar",
-          markers: markersData,
-        });
+        // Fallback: single marker (backward compatibility)
+        const { data: contentData, error: contentError } = await supabase
+          .from("ar_content")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (contentError || !contentData) {
+          setError("Konten AR tidak ditemukan");
+          setLoading(false);
+          return;
+        }
+
+        const projectObj: ARProject = {
+          id: contentData.id,
+          name: contentData.name,
+          library: contentData.library || "mindar",
+          markers: [contentData],
+        };
+
+        setProject(projectObj);
+
+        // ✅ Generate viewer URL after project is loaded
+        await generateViewerUrl(projectObj);
         setLoading(false);
-        return;
-      }
-
-      // Fallback: single marker (backward compatibility)
-      const { data: contentData, error: contentError } = await supabase
-        .from("ar_content")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
-
-      if (contentError || !contentData) {
-        setError("Konten AR tidak ditemukan");
+      } catch (err) {
+        console.error("Error fetching project:", err);
+        setError("Terjadi kesalahan saat memuat project");
         setLoading(false);
-        return;
       }
-
-      setProject({
-        id: contentData.id,
-        name: contentData.name,
-        library: contentData.library || "mindar",
-        markers: [contentData],
-      });
-      setLoading(false);
     };
 
     fetchProject();
   }, [id]);
+
+  // ✅ Separate function to generate viewer URL
+  const generateViewerUrl = async (proj: ARProject) => {
+    try {
+      if (proj.library === "mindar") {
+        // MindAR format
+        const markersParam = encodeURIComponent(
+          JSON.stringify(
+            proj.markers.map((m) => ({
+              mind: m.marker_data?.mindUrl || "",
+              content: m.content_url,
+              type: m.content_type,
+              scale: m.scale || 1,
+              name: m.name,
+            }))
+          )
+        );
+
+        // Generate secure token if function exists
+        let token = "";
+        try {
+          const { data, error } = await supabase.functions.invoke(
+            "generate-viewer-token",
+            { body: { projectId: proj.id } }
+          );
+          if (!error && data?.token) {
+            token = data.token;
+          }
+        } catch (err) {
+          console.warn("Could not generate token:", err);
+        }
+
+        const params = new URLSearchParams({
+          markers: markersParam,
+          projectId: proj.id,
+        });
+
+        if (token) {
+          params.append("token", token);
+        }
+
+        setViewerUrl(`/ar-viewer.html?${params.toString()}`);
+      } else {
+        // AR.js format
+        const markersParam = encodeURIComponent(
+          JSON.stringify(
+            proj.markers.map((m) => ({
+              name: m.name,
+              markerData: m.marker_data,
+              content: m.content_url,
+              type: m.content_type,
+              scale: m.scale || 1,
+            }))
+          )
+        );
+
+        const params = new URLSearchParams({
+          markers: markersParam,
+          projectId: proj.id,
+          supabaseUrl: ENV.SUPABASE_URL,
+          supabaseKey: ENV.SUPABASE_ANON_KEY,
+        });
+
+        setViewerUrl(`/arjs-viewer.html?${params.toString()}`);
+      }
+    } catch (err) {
+      console.error("Error generating viewer URL:", err);
+      setError("Gagal membuat URL viewer");
+    }
+  };
 
   if (loading) {
     return (
@@ -103,7 +192,7 @@ const ViewAR = () => {
     );
   }
 
-  if (error || !project) {
+  if (error || !project || !viewerUrl) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4 max-w-md">
@@ -123,62 +212,6 @@ const ViewAR = () => {
         </div>
       </div>
     );
-  }
-
-  // Prepare markers data based on library
-  let markersParam: string;
-  let viewerUrl: string;
-
-  // ✅ NEW: Get Supabase credentials from environment
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-  if (project.library === "mindar") {
-    // MindAR format
-    markersParam = encodeURIComponent(
-      JSON.stringify(
-        project.markers.map((m) => ({
-          mind: m.marker_data?.mindUrl || "",
-          content: m.content_url,
-          type: m.content_type,
-          scale: m.scale || 1,
-          name: m.name,
-        }))
-      )
-    );
-
-    // ✅ UPDATED: Add projectId for analytics tracking
-    const params = new URLSearchParams({
-      markers: markersParam,
-      projectId: project.id,
-      supabaseUrl: supabaseUrl,
-      supabaseKey: supabaseKey,
-    });
-
-    viewerUrl = `/ar-viewer.html?${params.toString()}`;
-  } else {
-    // AR.js format
-    markersParam = encodeURIComponent(
-      JSON.stringify(
-        project.markers.map((m) => ({
-          name: m.name,
-          markerData: m.marker_data,
-          content: m.content_url,
-          type: m.content_type,
-          scale: m.scale || 1,
-        }))
-      )
-    );
-
-    // ✅ UPDATED: Add projectId for analytics tracking
-    const params = new URLSearchParams({
-      markers: markersParam,
-      projectId: project.id,
-      supabaseUrl: supabaseUrl,
-      supabaseKey: supabaseKey,
-    });
-
-    viewerUrl = `/arjs-viewer.html?${params.toString()}`;
   }
 
   return (

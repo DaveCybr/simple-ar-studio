@@ -1,3 +1,6 @@
+// src/components/ARProjectForm.tsx
+// ✅ Updated with comprehensive file validation
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +29,7 @@ import {
   ChevronUp,
   Check,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +37,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Slider } from "@/components/ui/slider";
 import { PatternGeneratorButton } from "./ARProjectPatternGenerator";
 import { Badge } from "@/components/ui/badge";
+import {
+  validateVideo,
+  validateImage,
+  validatePattern,
+  type ValidationResult,
+} from "@/lib/fileValidation";
+import { ValidationFeedback } from "@/components/ValidationFeedback";
 
 interface Marker {
   id: string;
@@ -44,6 +55,10 @@ interface Marker {
   markerType: "pattern" | "barcode" | "hiro" | "kanji";
   barcodeValue?: number;
   markerImageFile: File | null;
+  // Validation results
+  contentValidation: ValidationResult | null;
+  patternValidation: ValidationResult | null;
+  markerValidation: ValidationResult | null;
 }
 
 interface ARProjectFormProps {
@@ -64,6 +79,7 @@ export const ARProjectForm = ({
   const [expandedMarkers, setExpandedMarkers] = useState<Set<string>>(
     new Set([markers[0]?.id])
   );
+  const [validating, setValidating] = useState<string | null>(null);
   const { toast } = useToast();
 
   function createEmptyMarker(): Marker {
@@ -76,6 +92,9 @@ export const ARProjectForm = ({
       patternFile: null,
       markerType: "pattern",
       markerImageFile: null,
+      contentValidation: null,
+      patternValidation: null,
+      markerValidation: null,
     };
   }
 
@@ -118,11 +137,182 @@ export const ARProjectForm = ({
     setMarkers(newMarkers);
   };
 
-  const isMarkerComplete = (marker: Marker): boolean => {
-    if (!marker.name || !marker.contentFile) return false;
-    if (marker.markerType === "pattern") {
-      return !!marker.patternFile;
+  // ✅ NEW: Handle content file with validation
+  const handleContentFileChange = async (index: number, file: File | null) => {
+    if (!file) {
+      updateMarker(index, {
+        contentFile: null,
+        contentValidation: null,
+      });
+      return;
     }
+
+    const marker = markers[index];
+    setValidating(`content-${index}`);
+
+    try {
+      const result =
+        marker.contentType === "video"
+          ? await validateVideo(file)
+          : await validateImage(file, "content");
+
+      if (!result.valid) {
+        toast({
+          title: "File Tidak Valid",
+          description: result.error,
+          variant: "destructive",
+        });
+        updateMarker(index, {
+          contentFile: null,
+          contentValidation: result,
+        });
+        return;
+      }
+
+      // Show warnings if any
+      if (result.warnings && result.warnings.length > 0) {
+        toast({
+          title: "Peringatan",
+          description: result.warnings[0],
+          variant: "default",
+        });
+      }
+
+      updateMarker(index, {
+        contentFile: file,
+        contentValidation: result,
+      });
+    } catch (error) {
+      toast({
+        title: "Error Validasi",
+        description: "Gagal memvalidasi file. Silakan coba lagi.",
+        variant: "destructive",
+      });
+    } finally {
+      setValidating(null);
+    }
+  };
+
+  // ✅ NEW: Handle pattern file with validation
+  const handlePatternFileChange = async (index: number, file: File | null) => {
+    if (!file) {
+      updateMarker(index, {
+        patternFile: null,
+        patternValidation: null,
+      });
+      return;
+    }
+
+    setValidating(`pattern-${index}`);
+
+    try {
+      const result = validatePattern(file);
+
+      if (!result.valid) {
+        toast({
+          title: "Pattern Tidak Valid",
+          description: result.error,
+          variant: "destructive",
+        });
+        updateMarker(index, {
+          patternFile: null,
+          patternValidation: result,
+        });
+        return;
+      }
+
+      if (result.warnings && result.warnings.length > 0) {
+        toast({
+          title: "Peringatan",
+          description: result.warnings[0],
+        });
+      }
+
+      updateMarker(index, {
+        patternFile: file,
+        patternValidation: result,
+      });
+    } finally {
+      setValidating(null);
+    }
+  };
+
+  // ✅ NEW: Handle marker image with validation
+  const handleMarkerImageChange = async (index: number, file: File | null) => {
+    if (!file) {
+      updateMarker(index, {
+        markerImageFile: null,
+        markerValidation: null,
+      });
+      return;
+    }
+
+    setValidating(`marker-${index}`);
+
+    try {
+      const result = await validateImage(file, "marker");
+
+      if (!result.valid) {
+        toast({
+          title: "Marker Tidak Valid",
+          description: result.error,
+          variant: "destructive",
+        });
+        updateMarker(index, {
+          markerImageFile: null,
+          markerValidation: result,
+        });
+        return;
+      }
+
+      if (result.warnings && result.warnings.length > 0) {
+        // Show most important warning
+        const importantWarning =
+          result.warnings.find(
+            (w) => w.includes("PENTING") || w.includes("kontras")
+          ) || result.warnings[0];
+
+        toast({
+          title: "Peringatan Marker",
+          description: importantWarning,
+          variant: "default",
+        });
+      }
+
+      updateMarker(index, {
+        markerImageFile: file,
+        markerValidation: result,
+      });
+    } catch (error) {
+      toast({
+        title: "Error Validasi",
+        description: "Gagal memvalidasi marker. Silakan coba lagi.",
+        variant: "destructive",
+      });
+    } finally {
+      setValidating(null);
+    }
+  };
+
+  const isMarkerComplete = (marker: Marker): boolean => {
+    // 1. Nama wajib diisi
+    if (!marker.name) {
+      return false;
+    }
+
+    // 2. Content file dan validasi wajib ada
+    if (!marker.contentFile || !marker.contentValidation?.valid) {
+      return false;
+    }
+
+    // 3. Cek berdasarkan marker type
+    if (marker.markerType === "pattern") {
+      // Pattern type WAJIB ada pattern file
+      return !!marker.patternFile && marker.patternValidation?.valid === true;
+    }
+
+    // 4. Untuk barcode, hiro, kanji: tidak perlu pattern file
+    // Marker-marker ini menggunakan preset bawaan AR.js
     return true;
   };
 
@@ -177,24 +367,40 @@ export const ARProjectForm = ({
 
     for (let i = 0; i < markers.length; i++) {
       const m = markers[i];
-      if (!m.name || !m.contentFile) {
+
+      if (!m.name) {
         toast({
           title: "Data Tidak Lengkap",
-          description: `Lengkapi data untuk Marker ${i + 1}`,
+          description: `Marker ${i + 1}: Nama harus diisi`,
           variant: "destructive",
         });
         return false;
       }
 
-      if (m.markerType === "pattern" && !m.patternFile) {
+      if (!m.contentFile || !m.contentValidation?.valid) {
         toast({
-          title: "Error",
-          description: `Marker ${i + 1} memerlukan pattern file`,
+          title: "Data Tidak Lengkap",
+          description: `Marker ${i + 1}: Content tidak valid atau belum diisi`,
           variant: "destructive",
         });
         return false;
       }
+
+      // Hanya cek pattern file untuk marker type "pattern"
+      if (m.markerType === "pattern") {
+        if (!m.patternFile || !m.patternValidation?.valid) {
+          toast({
+            title: "Error",
+            description: `Marker ${
+              i + 1
+            }: Pattern file tidak valid atau belum diisi`,
+            variant: "destructive",
+          });
+          return false;
+        }
+      }
     }
+
     return true;
   };
 
@@ -472,19 +678,14 @@ export const ARProjectForm = ({
             </Button>
           </div>
 
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription className="text-sm">
-              Marker adalah gambar atau pola yang akan dideteksi kamera untuk
-              menampilkan konten AR. Anda bisa menggunakan custom pattern,
-              barcode, atau preset marker.
-            </AlertDescription>
-          </Alert>
-
           <div className="space-y-3">
             {markers.map((marker, index) => {
               const isExpanded = expandedMarkers.has(marker.id);
               const isComplete = isMarkerComplete(marker);
+              const isValidatingThis =
+                validating?.startsWith(`content-${index}`) ||
+                validating?.startsWith(`pattern-${index}`) ||
+                validating?.startsWith(`marker-${index}`);
 
               return (
                 <Card
@@ -523,10 +724,19 @@ export const ARProjectForm = ({
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {isValidatingThis && (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        )}
                         {isComplete && (
                           <Badge variant="default" className="bg-green-500">
                             <CheckCircle className="w-3 h-3 mr-1" />
-                            Complete
+                            Valid
+                          </Badge>
+                        )}
+                        {!isComplete && marker.contentFile && (
+                          <Badge variant="secondary">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Incomplete
                           </Badge>
                         )}
                         {markers.length > 1 && (
@@ -631,16 +841,28 @@ export const ARProjectForm = ({
                               type="file"
                               accept=".patt"
                               onChange={(e) =>
-                                updateMarker(index, {
-                                  patternFile: e.target.files?.[0] || null,
-                                })
+                                handlePatternFileChange(
+                                  index,
+                                  e.target.files?.[0] || null
+                                )
                               }
-                              disabled={uploading}
+                              disabled={
+                                uploading || validating === `pattern-${index}`
+                              }
                             />
                             <p className="text-xs text-muted-foreground">
                               Upload file .patt yang sudah di-generate
                             </p>
                           </div>
+
+                          {/* ✅ Pattern Validation Feedback */}
+                          {marker.patternValidation && (
+                            <ValidationFeedback
+                              result={marker.patternValidation}
+                              fileName={marker.patternFile?.name || ""}
+                              fileType="pattern"
+                            />
+                          )}
 
                           <div className="relative">
                             <div className="absolute inset-0 flex items-center">
@@ -655,16 +877,74 @@ export const ARProjectForm = ({
 
                           <PatternGeneratorButton
                             disabled={uploading}
-                            onPatternGenerated={(data) => {
+                            onPatternGenerated={async (data) => {
+                              const [patternResult, markerResult] =
+                                await Promise.all([
+                                  validatePattern(data.patternFile),
+                                  validateImage(data.markerImageFile, "marker"),
+                                ]);
+                              // 1. Set files dulu
                               updateMarker(index, {
                                 patternFile: data.patternFile,
                                 markerImageFile: data.markerImageFile,
+                                patternValidation: patternResult,
+                                markerValidation: markerResult,
                               });
-                              toast({
-                                title: "Pattern Generated!",
-                                description:
-                                  "Pattern berhasil di-generate dari gambar",
-                              });
+
+                              // 2. Run validations secara parallel
+                              try {
+                                const [patternResult, markerResult] =
+                                  await Promise.all([
+                                    // Validate pattern
+                                    (async () => {
+                                      const result = validatePattern(
+                                        data.patternFile
+                                      );
+                                      return result;
+                                    })(),
+                                    // Validate marker image
+                                    validateImage(
+                                      data.markerImageFile,
+                                      "marker"
+                                    ),
+                                  ]);
+
+                                // 3. Update dengan hasil validasi sekaligus
+                                updateMarker(index, {
+                                  patternFile: data.patternFile,
+                                  markerImageFile: data.markerImageFile,
+                                  patternValidation: patternResult,
+                                  markerValidation: markerResult,
+                                });
+
+                                // 4. Show appropriate toast
+                                if (patternResult.valid && markerResult.valid) {
+                                  toast({
+                                    title: "Pattern Generated!",
+                                    description:
+                                      "Pattern dan marker berhasil di-generate dan divalidasi",
+                                  });
+                                } else {
+                                  const errors = [
+                                    !patternResult.valid && patternResult.error,
+                                    !markerResult.valid && markerResult.error,
+                                  ].filter(Boolean);
+
+                                  toast({
+                                    title: "Validasi Gagal",
+                                    description: errors.join(". "),
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (error) {
+                                console.error("Validation error:", error);
+                                toast({
+                                  title: "Error",
+                                  description:
+                                    "Gagal memvalidasi pattern yang di-generate",
+                                  variant: "destructive",
+                                });
+                              }
                             }}
                           />
                         </div>
@@ -697,107 +977,164 @@ export const ARProjectForm = ({
                           type="file"
                           accept="image/*"
                           onChange={(e) =>
-                            updateMarker(index, {
-                              markerImageFile: e.target.files?.[0] || null,
-                            })
+                            handleMarkerImageChange(
+                              index,
+                              e.target.files?.[0] || null
+                            )
                           }
-                          disabled={uploading}
+                          disabled={
+                            uploading || validating === `marker-${index}`
+                          }
                         />
+
                         {marker.markerImageFile && (
-                          <div className="w-32 h-32 rounded-lg overflow-hidden border-2 border-primary">
+                          <div className="w-32 h-32 rounded-lg overflow-hidden border-2 border-muted">
                             <img
-                              src={getFilePreview(marker.markerImageFile) || ""}
-                              alt="Preview"
+                              src={getFilePreview(marker.markerImageFile)}
+                              alt="Marker preview"
                               className="w-full h-full object-cover"
                             />
                           </div>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                          Upload foto marker untuk preview di daftar project
-                        </p>
-                      </div>
 
-                      <div className="space-y-2">
-                        <Label>Tipe Konten AR</Label>
-                        <div className="flex gap-3">
-                          <Button
-                            type="button"
-                            variant={
-                              marker.contentType === "video"
-                                ? "default"
-                                : "outline"
-                            }
-                            onClick={() =>
-                              updateMarker(index, { contentType: "video" })
-                            }
-                            disabled={uploading}
-                            className="flex-1"
-                          >
-                            <FileVideo className="w-4 h-4 mr-2" />
-                            Video
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={
-                              marker.contentType === "image"
-                                ? "default"
-                                : "outline"
-                            }
-                            onClick={() =>
-                              updateMarker(index, { contentType: "image" })
-                            }
-                            disabled={uploading}
-                            className="flex-1"
-                          >
-                            <Image className="w-4 h-4 mr-2" />
-                            Gambar
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>File Konten AR *</Label>
-                        <Input
-                          type="file"
-                          accept={
-                            marker.contentType === "video"
-                              ? "video/*"
-                              : "image/*"
-                          }
-                          onChange={(e) =>
-                            updateMarker(index, {
-                              contentFile: e.target.files?.[0] || null,
-                            })
-                          }
-                          disabled={uploading}
-                        />
-                        {marker.contentFile && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <CheckCircle className="w-4 h-4 text-green-500" />
-                            {marker.contentFile.name}
-                          </div>
+                        {/* ✅ Marker Validation Feedback */}
+                        {marker.markerValidation && (
+                          <ValidationFeedback
+                            result={marker.markerValidation}
+                            fileName={marker.markerImageFile?.name || ""}
+                            fileType="marker"
+                          />
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <Label>Ukuran Konten</Label>
-                          <span className="text-sm font-medium">
+                      {/* Content Section */}
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label>Tipe Content *</Label>
+                          <RadioGroup
+                            value={marker.contentType}
+                            onValueChange={(val) =>
+                              updateMarker(index, {
+                                contentType: val as "video" | "image",
+                                contentFile: null,
+                                contentValidation: null,
+                              })
+                            }
+                            disabled={uploading}
+                            className="flex gap-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem
+                                value="video"
+                                id={`video-${index}`}
+                              />
+                              <Label
+                                htmlFor={`video-${index}`}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <FileVideo className="w-4 h-4" />
+                                Video
+                              </Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem
+                                value="image"
+                                id={`image-${index}`}
+                              />
+                              <Label
+                                htmlFor={`image-${index}`}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <Image className="w-4 h-4" />
+                                Image
+                              </Label>
+                            </div>
+                          </RadioGroup>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>
+                            {marker.contentType === "video"
+                              ? "Video Content *"
+                              : "Image Content *"}
+                          </Label>
+                          <Input
+                            type="file"
+                            accept={
+                              marker.contentType === "video"
+                                ? "video/*"
+                                : "image/*"
+                            }
+                            onChange={(e) =>
+                              handleContentFileChange(
+                                index,
+                                e.target.files?.[0] || null
+                              )
+                            }
+                            disabled={
+                              uploading || validating === `content-${index}`
+                            }
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {marker.contentType === "video"
+                              ? "Video akan ditampilkan saat marker terdeteksi"
+                              : "Gambar akan ditampilkan saat marker terdeteksi"}
+                          </p>
+                        </div>
+
+                        {/* Content Preview */}
+                        {marker.contentFile && (
+                          <div className="space-y-2">
+                            <Label>Preview</Label>
+                            <div className="w-full max-w-xs rounded-lg overflow-hidden border-2 border-muted">
+                              {marker.contentType === "video" ? (
+                                <video
+                                  src={URL.createObjectURL(marker.contentFile)}
+                                  controls
+                                  className="w-full"
+                                />
+                              ) : (
+                                <img
+                                  src={getFilePreview(marker.contentFile)}
+                                  alt="Content preview"
+                                  className="w-full h-auto"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ✅ Content Validation Feedback */}
+                        {marker.contentValidation && (
+                          <ValidationFeedback
+                            result={marker.contentValidation}
+                            fileName={marker.contentFile?.name || ""}
+                            fileType={marker.contentType}
+                          />
+                        )}
+                      </div>
+
+                      {/* Scale Slider */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Skala Content</Label>
+                          <Badge variant="outline">
                             {marker.scale.toFixed(1)}x
-                          </span>
+                          </Badge>
                         </div>
                         <Slider
                           value={[marker.scale]}
                           onValueChange={(val) =>
                             updateMarker(index, { scale: val[0] })
                           }
-                          min={0.5}
-                          max={3}
+                          min={0.1}
+                          max={3.0}
                           step={0.1}
                           disabled={uploading}
+                          className="w-full"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Sesuaikan ukuran konten yang muncul di AR
+                          Atur ukuran content relatif terhadap marker
                         </p>
                       </div>
                     </CardContent>
@@ -808,23 +1145,44 @@ export const ARProjectForm = ({
           </div>
         </div>
 
-        <Button
-          onClick={handleSubmit}
-          className="w-full h-12 text-base"
-          disabled={uploading || !isStepComplete(1) || !isStepComplete(2)}
-        >
-          {uploading ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              {currentStep}
-            </>
-          ) : (
-            <>
-              <Upload className="w-5 h-5 mr-2" />
-              Buat Project ({markers.length} marker)
-            </>
-          )}
-        </Button>
+        {/* Submit Button */}
+        <div className="flex gap-3 pt-4 border-t">
+          <Button
+            onClick={handleSubmit}
+            disabled={uploading || !projectName || markers.length === 0}
+            className="flex-1"
+            size="lg"
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                Buat Project ({markers.length} Marker
+                {markers.length > 1 ? "s" : ""})
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Help Text */}
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            <strong>Tips untuk hasil AR terbaik:</strong>
+            <ul className="list-disc list-inside mt-2 space-y-1">
+              <li>Gunakan marker dengan kontras tinggi (gelap-terang)</li>
+              <li>
+                Hindari marker yang terlalu sederhana atau terlalu kompleks
+              </li>
+              <li>Video optimal: 720p-1080p, durasi {"<"} 2 menit</li>
+              <li>Marker image: minimal 512x512px, idealnya 1024x1024px</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
       </CardContent>
     </Card>
   );
