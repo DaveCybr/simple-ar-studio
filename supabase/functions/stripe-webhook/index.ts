@@ -112,14 +112,14 @@ serve(async (req) => {
             subscription_tier: plan,
             upload_quota: getQuotaForPlan(plan),
             stripe_customer_id: session.customer as string,
-            is_trial_active: false,
-            trial_ends_at: null,
+            is_trial_active: false, // ✅ End trial
+            trial_ends_at: null, // ✅ Clear trial date
             updated_at: new Date().toISOString(),
           })
           .eq("id", userId);
 
         if (error) throw error;
-        console.log(`✅ User ${userId} upgraded to ${plan}`);
+        console.log(`✅ User ${userId} upgraded from trial to ${plan}`);
         break;
       }
 
