@@ -23,12 +23,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // ✅ Check jika sedang di halaman reset password
+    const isResetPasswordPage = window.location.pathname === "/reset-password";
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth event:", event); // For debugging
+
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // ✅ Jangan redirect jika sedang PASSWORD_RECOVERY
+      if (event === "PASSWORD_RECOVERY" && !isResetPasswordPage) {
+        window.location.href = "/reset-password";
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {

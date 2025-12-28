@@ -5,14 +5,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AuthWrapper } from "@/components/AuthWrapper";
+import { UserWrapper } from "./components/UserWrapper";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Pricing from "./pages/Pricing";
 import ViewAR from "./pages/ViewAR";
 import NotFound from "./pages/NotFound";
-import ResetPassword from "./pages/ResetPassword"; // ✅ TAMBAHKAN INI
-import { UserWrapper } from "./components/UserWrapper";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -36,7 +36,6 @@ const AppRoutes = () => (
     />
     <Route path="/auth" element={<Auth />} />
 
-    {/* ✅ TAMBAHKAN ROUTE INI */}
     <Route path="/reset-password" element={<ResetPassword />} />
 
     <Route

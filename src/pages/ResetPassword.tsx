@@ -1,4 +1,3 @@
-// src/pages/ResetPassword.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Scan, Loader2, Lock } from "lucide-react";
+import { Scan, Loader2, Lock, Eye, EyeOff } from "lucide-react";
 import { z } from "zod";
 
 const passwordSchema = z.string().min(6, "Password minimal 6 karakter");
@@ -22,24 +21,60 @@ const ResetPassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(true);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isValidSession, setIsValidSession] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    // Check if user came from password reset email
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsValidSession(true);
-      } else {
+    const verifyRecoverySession = async () => {
+      try {
+        // Check for hash fragment (recovery token)
+        const hashParams = new URLSearchParams(
+          window.location.hash.substring(1)
+        );
+        const type = hashParams.get("type");
+
+        if (type === "recovery") {
+          // User came from email link - session is already set by Supabase
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session) {
+            setIsValidSession(true);
+          } else {
+            throw new Error("Session tidak valid");
+          }
+        } else {
+          // Check if user has valid session (maybe navigated directly)
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session) {
+            setIsValidSession(true);
+          } else {
+            throw new Error("Link reset password tidak valid");
+          }
+        }
+      } catch (error: any) {
         toast({
           title: "Link Tidak Valid",
-          description: "Link reset password sudah kadaluarsa atau tidak valid",
+          description:
+            error.message ||
+            "Link reset password sudah kadaluarsa atau tidak valid",
           variant: "destructive",
         });
         setTimeout(() => navigate("/auth"), 2000);
+      } finally {
+        setVerifying(false);
       }
-    });
+    };
+
+    verifyRecoverySession();
   }, [navigate, toast]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -71,38 +106,52 @@ const ResetPassword = () => {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-
-    if (error) {
-      toast({
-        title: "Reset Password Gagal",
-        description: error.message,
-        variant: "destructive",
-      });
-      setLoading(false);
-    } else {
-      toast({
-        title: "Berhasil",
-        description: "Password Anda telah diubah!",
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
       });
 
-      // Sign out user and redirect to login
+      if (error) throw error;
+
+      toast({
+        title: "Berhasil!",
+        description:
+          "Password Anda telah diubah. Silakan login dengan password baru.",
+      });
+
+      // Clear hash from URL
+      window.history.replaceState(null, "", window.location.pathname);
+
+      // Sign out and redirect to login
       await supabase.auth.signOut();
       setTimeout(() => navigate("/auth"), 1500);
+    } catch (error: any) {
+      toast({
+        title: "Reset Password Gagal",
+        description:
+          error.message || "Terjadi kesalahan saat mengubah password",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!isValidSession) {
+  if (verifying) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Memverifikasi link...</p>
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <p className="text-muted-foreground">
+            Memverifikasi link reset password...
+          </p>
         </div>
       </div>
     );
+  }
+
+  if (!isValidSession) {
+    return null; // Toast sudah muncul dan akan redirect
   }
 
   return (
@@ -129,14 +178,26 @@ const ResetPassword = () => {
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="new-password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Minimal 6 karakter"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   required
                   disabled={loading}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                  disabled={loading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -146,20 +207,42 @@ const ResetPassword = () => {
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="confirm-password"
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   placeholder="Ketik ulang password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   required
                   disabled={loading}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                  disabled={loading}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Ganti Password
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => navigate("/auth")}
+              disabled={loading}
+            >
+              Batal
             </Button>
           </form>
         </CardContent>
