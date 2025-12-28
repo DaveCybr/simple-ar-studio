@@ -2,16 +2,52 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthWrapper } from "@/components/AuthWrapper"; // Import AuthWrapper
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Pricing from "./pages/Pricing";
 import ViewAR from "./pages/ViewAR";
 import NotFound from "./pages/NotFound";
+import { UserWrapper } from "./components/UserWrapper";
 
 const queryClient = new QueryClient();
+
+const AppRoutes = () => (
+  <Routes>
+    <Route
+      path="/"
+      element={
+        <UserWrapper>
+          <Landing />
+        </UserWrapper>
+      }
+    />
+    <Route
+      path="/pricing"
+      element={
+        <UserWrapper>
+          <Pricing />
+        </UserWrapper>
+      }
+    />
+    <Route path="/auth" element={<Auth />} />
+
+    <Route
+      path="/dashboard"
+      element={
+        <AuthWrapper>
+          <Dashboard />
+        </AuthWrapper>
+      }
+    />
+
+    <Route path="/view/:id" element={<ViewAR />} />
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -25,14 +61,7 @@ const App = () => (
             v7_relativeSplatPath: true,
           }}
         >
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/view/:id" element={<ViewAR />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
