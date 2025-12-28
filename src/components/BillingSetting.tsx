@@ -1,4 +1,4 @@
-// src/components/BillingSettings.tsx - Fixed Version
+// src/components/BillingSettings.tsx - FIXED VERSION
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 
 interface BillingSettingsProps {
-  subscriptionTier: "demo" | "pro" | "pro_plus"; // ✅ FIX
+  subscriptionTier: "demo" | "pro" | "pro_plus";
   uploadQuota: number;
   uploadsUsed: number;
   stripeCustomerId: string | null;
@@ -51,7 +51,11 @@ export const BillingSettings = ({
   const [loading, setLoading] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
-  const tierInfo = {
+  // ✅ FIX: Safe tier info dengan fallback
+  const tierInfo: Record<
+    "demo" | "pro" | "pro_plus",
+    { name: string; color: string; description: string; quota: string }
+  > = {
     demo: {
       name: "Demo Plan",
       color: "bg-gray-500",
@@ -71,6 +75,9 @@ export const BillingSettings = ({
       quota: "30 projects/month",
     },
   };
+
+  // ✅ FIX: Safe access dengan default value
+  const currentTier = tierInfo[subscriptionTier] || tierInfo.demo;
 
   // Calculate days remaining in trial
   const getDaysRemaining = () => {
@@ -140,12 +147,12 @@ export const BillingSettings = ({
               Manage your subscription and billing settings
             </CardDescription>
           </div>
-          <Badge className={`${tierInfo[subscriptionTier].color} text-white`}>
+          <Badge className={`${currentTier.color} text-white`}>
             {subscriptionTier === "pro_plus" && (
               <Sparkles className="w-3 h-3 mr-1" />
             )}
             {subscriptionTier === "pro" && <Crown className="w-3 h-3 mr-1" />}
-            {tierInfo[subscriptionTier].name}
+            {currentTier.name}
           </Badge>
         </div>
       </CardHeader>
@@ -196,9 +203,11 @@ export const BillingSettings = ({
                 >
                   {isTrialExpired
                     ? "Your trial has ended. Upgrade to continue using premium features."
-                    : `Your trial ends on ${new Date(
-                        trialEndsAt!
-                      ).toLocaleDateString()}. Upgrade now to keep access to all features.`}
+                    : trialEndsAt
+                    ? `Your trial ends on ${new Date(
+                        trialEndsAt
+                      ).toLocaleDateString()}. Upgrade now to keep access to all features.`
+                    : "Enjoy unlimited access during your trial period."}
                 </p>
               </div>
             </div>
@@ -210,14 +219,14 @@ export const BillingSettings = ({
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium">Current Plan</span>
             <span className="text-sm text-muted-foreground">
-              {tierInfo[subscriptionTier].description}
+              {currentTier.description}
             </span>
           </div>
 
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium">Monthly Quota</span>
             <span className="text-sm text-muted-foreground">
-              {tierInfo[subscriptionTier].quota}
+              {currentTier.quota}
             </span>
           </div>
 
@@ -243,7 +252,7 @@ export const BillingSettings = ({
           )}
 
           {/* Usage Progress Bar */}
-          {subscriptionTier !== "demo" && (
+          {subscriptionTier !== "demo" && uploadQuota > 0 && (
             <div className="space-y-1">
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
