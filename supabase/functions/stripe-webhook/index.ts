@@ -1,19 +1,24 @@
-// supabase/functions/stripe-webhook/index.ts - FIXED VERSION
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// supabase/functions/stripe-webhook/index.ts
+// ✅ FIXED VERSION - Tanpa Authorization Header Check
+
+import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.10.0?target=deno";
 
+// CORS headers
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, stripe-signature",
 };
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+// ✅ Initialize Stripe
+const stripe = new Stripe(Deno.env.get("STRIPE_API_KEY") || "", {
   apiVersion: "2023-10-16",
   httpClient: Stripe.createFetchHttpClient(),
 });
 
+// ✅ WAJIB: Crypto provider untuk Deno
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
 serve(async (req) => {
@@ -22,51 +27,85 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const signature = req.headers.get("Stripe-Signature");
+  console.log("📨 Webhook request received");
+
+  // ✅ Get Stripe signature dari header (ini yang authenticate webhook)
+  const signature = req.headers.get("stripe-signature");
 
   if (!signature) {
-    console.error("No Stripe signature found");
-    return new Response(JSON.stringify({ error: "No Stripe signature" }), {
+    console.error("❌ No Stripe signature found in headers");
+    return new Response(JSON.stringify({ error: "Missing Stripe signature" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
+  console.log("🔍 Stripe signature found, verifying...");
+
+  // ✅ PENTING: Get raw body sebagai text (bukan JSON)
   const body = await req.text();
   let event: Stripe.Event;
 
   try {
-    // Verify webhook signature
+    // ✅ Verify webhook signature
+    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SIGNING_SECRET");
+
+    if (!webhookSecret) {
+      console.error("❌ STRIPE_WEBHOOK_SIGNING_SECRET not set");
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     event = await stripe.webhooks.constructEventAsync(
       body,
       signature,
-      Deno.env.get("STRIPE_WEBHOOK_SECRET")!,
+      webhookSecret,
       undefined,
       cryptoProvider
     );
+
+    console.log("✅ Webhook signature verified successfully");
   } catch (err: any) {
-    console.error("Webhook signature verification failed:", err.message);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 400,
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return new Response(
+      JSON.stringify({
+        error: "Webhook signature verification failed",
+        message: err.message,
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  console.log(`📥 Received event: ${event.type} [${event.id}]`);
+
+  // ✅ Initialize Supabase Admin Client (TIDAK perlu authorization header)
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error("❌ Supabase credentials not configured");
+    return new Response(JSON.stringify({ error: "Supabase not configured" }), {
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  console.log("✅ Received event:", event.type);
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 
-  // Initialize Supabase client with SERVICE ROLE KEY (no auth needed)
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, // PENTING: Pakai SERVICE_ROLE_KEY
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
-
-  // Handle different event types
+  // ✅ Handle different webhook event types
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -74,57 +113,65 @@ serve(async (req) => {
         const userId = session.metadata?.user_id;
         const plan = session.metadata?.plan;
 
-        console.log("Processing checkout.session.completed", {
+        console.log("Processing checkout.session.completed:", {
           userId,
           plan,
           customerId: session.customer,
+          subscriptionId: session.subscription,
         });
 
-        if (userId && plan) {
-          // Determine upload quota based on plan
-          let uploadQuota = 3; // default
-          if (plan === "demo") uploadQuota = 999999;
-          else if (plan === "pro") uploadQuota = 20;
-          else if (plan === "pro_plus") uploadQuota = 30;
-
-          // Update user subscription
-          const { error } = await supabase
-            .from("profiles")
-            .update({
-              subscription_tier: plan,
-              upload_quota: uploadQuota,
-              stripe_customer_id: session.customer as string,
-              is_trial_active: false,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", userId);
-
-          if (error) {
-            console.error("Database update error:", error);
-            throw error;
-          }
-
-          console.log(`✅ Updated user ${userId} to ${plan} plan`);
-        } else {
-          console.warn("Missing userId or plan in metadata", {
+        if (!userId || !plan) {
+          console.warn("⚠️ Missing metadata in checkout session:", {
             userId,
             plan,
             metadata: session.metadata,
           });
+          break;
         }
+
+        // Determine upload quota based on plan
+        let uploadQuota = 3; // default free
+        if (plan === "demo") {
+          uploadQuota = 999999;
+        } else if (plan === "pro") {
+          uploadQuota = 20;
+        } else if (plan === "pro_plus") {
+          uploadQuota = 30;
+        }
+
+        // Update user profile
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            subscription_tier: plan,
+            upload_quota: uploadQuota,
+            stripe_customer_id: session.customer as string,
+            is_trial_active: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId);
+
+        if (updateError) {
+          console.error("❌ Database update error:", updateError);
+          throw updateError;
+        }
+
+        console.log(`✅ Successfully updated user ${userId} to ${plan} plan`);
         break;
       }
 
+      case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
-        console.log("Processing customer.subscription.updated", {
+        console.log(`Processing ${event.type}:`, {
           customerId,
+          subscriptionId: subscription.id,
           status: subscription.status,
         });
 
-        // Get user from customer ID
+        // Find user by Stripe customer ID
         const { data: profile, error: fetchError } = await supabase
           .from("profiles")
           .select("id")
@@ -132,40 +179,49 @@ serve(async (req) => {
           .single();
 
         if (fetchError) {
-          console.error("Profile fetch error:", fetchError);
+          console.error("❌ Profile fetch error:", fetchError);
           throw fetchError;
         }
 
-        if (profile) {
-          let newTier = "demo";
-          let newQuota = 999999;
+        if (!profile) {
+          console.warn("⚠️ No profile found for customer:", customerId);
+          break;
+        }
 
-          if (subscription.status === "active") {
-            // Determine tier from subscription metadata or price
-            const metadata = subscription.metadata;
-            if (metadata?.plan) {
-              newTier = metadata.plan;
-              if (newTier === "pro") newQuota = 20;
-              else if (newTier === "pro_plus") newQuota = 30;
+        // Determine plan and quota
+        let newTier = "free";
+        let newQuota = 3;
+
+        if (subscription.status === "active") {
+          // Try to get plan from metadata
+          const metadata = subscription.metadata;
+          if (metadata?.plan) {
+            newTier = metadata.plan;
+            if (newTier === "pro") {
+              newQuota = 20;
+            } else if (newTier === "pro_plus") {
+              newQuota = 30;
+            } else if (newTier === "demo") {
+              newQuota = 999999;
             }
           }
-
-          const { error: updateError } = await supabase
-            .from("profiles")
-            .update({
-              subscription_tier: newTier,
-              upload_quota: newQuota,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", profile.id);
-
-          if (updateError) {
-            console.error("Update error:", updateError);
-            throw updateError;
-          }
-
-          console.log(`✅ Subscription updated for user ${profile.id}`);
         }
+
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            subscription_tier: newTier,
+            upload_quota: newQuota,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", profile.id);
+
+        if (updateError) {
+          console.error("❌ Subscription update error:", updateError);
+          throw updateError;
+        }
+
+        console.log(`✅ Subscription updated for user ${profile.id}`);
         break;
       }
 
@@ -173,7 +229,10 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
-        console.log("Processing customer.subscription.deleted", { customerId });
+        console.log("Processing customer.subscription.deleted:", {
+          customerId,
+          subscriptionId: subscription.id,
+        });
 
         const { data: profile } = await supabase
           .from("profiles")
@@ -182,8 +241,8 @@ serve(async (req) => {
           .single();
 
         if (profile) {
-          // Downgrade to demo
-          await supabase
+          // Downgrade to demo/free plan
+          const { error: updateError } = await supabase
             .from("profiles")
             .update({
               subscription_tier: "demo",
@@ -196,6 +255,11 @@ serve(async (req) => {
             })
             .eq("id", profile.id);
 
+          if (updateError) {
+            console.error("❌ Downgrade error:", updateError);
+            throw updateError;
+          }
+
           console.log(`✅ Subscription canceled for user ${profile.id}`);
         }
         break;
@@ -204,13 +268,34 @@ serve(async (req) => {
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         console.log(`✅ Payment succeeded for invoice ${invoice.id}`);
+        // Add any additional logic here if needed
         break;
       }
 
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+
         console.log(`❌ Payment failed for invoice ${invoice.id}`);
-        // TODO: Send email notification to user
+
+        // Optional: Mark subscription as past_due
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("stripe_customer_id", customerId)
+          .single();
+
+        if (profile) {
+          await supabase
+            .from("profiles")
+            .update({
+              subscription_tier: "free",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", profile.id);
+
+          console.log(`⚠️ User ${profile.id} marked as payment failed`);
+        }
         break;
       }
 
@@ -218,15 +303,24 @@ serve(async (req) => {
         console.log(`ℹ️ Unhandled event type: ${event.type}`);
     }
 
-    return new Response(JSON.stringify({ received: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // ✅ Return success response
+    return new Response(
+      JSON.stringify({
+        received: true,
+        eventId: event.id,
+        eventType: event.type,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   } catch (error: any) {
     console.error("❌ Error processing webhook:", error);
     return new Response(
       JSON.stringify({
-        error: error.message,
+        error: "Webhook processing failed",
+        message: error.message,
         type: error.name,
       }),
       {

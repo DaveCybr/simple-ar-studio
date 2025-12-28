@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 
 interface BillingSettingsProps {
-  subscriptionTier: "demo" | "pro" | "pro_plus";
+  subscriptionTier: "demo" | "pro" | "pro_plus"; // ✅ FIX
   uploadQuota: number;
   uploadsUsed: number;
   stripeCustomerId: string | null;

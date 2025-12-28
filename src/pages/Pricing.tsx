@@ -49,7 +49,7 @@ const Pricing = () => {
       price: "$29",
       period: "/month",
       yearlyPrice: "$24/mo if billed year",
-      priceId: "price_1SjLd62LSlGk7TpH1yaPXeVN", // <-- Ganti dengan Price ID dari Stripe
+      priceId: "price_1SjLcR2LSlGk7TpHhY1p4qsC", // <-- Ganti dengan Price ID dari Stripe
       plan: "pro",
       popular: true,
       buttonText: "Buy now PRO",
