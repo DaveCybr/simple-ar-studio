@@ -13,7 +13,8 @@ export const UserWrapper = ({ children }: { children: ReactNode }) => {
     }
   }, [user, loading, navigate]);
 
-  if (loading || !user) {
+  // ✅ FIX: Hanya tampilkan loading saat masih mengecek auth
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <span className="text-lg text-muted-foreground">Memuat...</span>
@@ -21,5 +22,6 @@ export const UserWrapper = ({ children }: { children: ReactNode }) => {
     );
   }
 
+  // ✅ Tampilkan children untuk user yang belum login
   return <>{children}</>;
 };
