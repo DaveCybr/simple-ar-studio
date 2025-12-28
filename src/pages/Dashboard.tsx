@@ -24,8 +24,10 @@ import {
   Loader2,
 } from "lucide-react";
 import { ARProjectForm } from "@/components/ARProjectForm";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Profile {
+  avatar_url: any;
   id: string;
   email: string | null;
   full_name: string | null;
@@ -124,7 +126,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -149,19 +150,34 @@ const Dashboard = () => {
                 {tierLabels[profile?.subscription_tier || "free"]}
               </Badge>
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                {profile?.email || user?.email}
-              </span>
+
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage
+                  src={profile?.avatar_url || undefined}
+                  alt={profile?.full_name || profile?.email || "User"}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  {(profile?.full_name || profile?.email || "U")
+                    .charAt(0)
+                    .toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="hidden sm:block text-sm">
+                <p className="font-medium">{profile?.full_name || "User"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {profile?.email || user?.email}
+                </p>
+              </div>
             </div>
+
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
       </header>
-
       {/* Quota Card */}
       <div className="container mx-auto px-4 py-6">
         <Card className="mb-8">

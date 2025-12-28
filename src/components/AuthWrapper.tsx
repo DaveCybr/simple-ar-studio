@@ -9,7 +9,7 @@ export const AuthWrapper = ({ children }: { children: ReactNode }) => {
   // Redirect unauthenticated users to auth page
   useEffect(() => {
     if (!loading && !user) {
-      navigate("/login", { replace: true });
+      navigate("/auth", { replace: true });
     }
   }, [user, loading, navigate]);
 
