@@ -1,7 +1,7 @@
 // supabase/functions/create-checkout/index.ts
 // ✅ FIXED VERSION - Konsisten dengan stripe-webhook
 
-import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.10.0?target=deno";
 
