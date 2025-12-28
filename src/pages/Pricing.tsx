@@ -1,4 +1,6 @@
-import { Link } from "react-router-dom";
+// src/pages/Pricing.tsx - Updated with Stripe Integration
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -8,10 +10,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Scan, Check, ArrowLeft } from "lucide-react";
+import { Scan, Check, ArrowLeft, Loader2, Crown } from "lucide-react";
 import { GuestLayout } from "@/components/layouts/GuestLayout";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Pricing = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  // Stripe Price IDs - GANTI INI DENGAN PRICE ID DARI STRIPE DASHBOARD
+  const STRIPE_PRICES = {
+    pro_monthly: "price_1234567890", // Ganti dengan Price ID Stripe mu
+    enterprise_monthly: "price_0987654321", // Ganti dengan Price ID Stripe mu
+  };
+
   const plans = [
     {
       name: "Free",
@@ -27,6 +43,8 @@ const Pricing = () => {
       buttonText: "Mulai Gratis",
       buttonVariant: "outline" as const,
       popular: false,
+      priceId: null,
+      tier: "free",
     },
     {
       name: "Pro",
@@ -41,9 +59,11 @@ const Pricing = () => {
         "Prioritas support",
         "Analytics dasar",
       ],
-      buttonText: "Pilih Pro",
+      buttonText: "Upgrade ke Pro",
       buttonVariant: "default" as const,
       popular: true,
+      priceId: STRIPE_PRICES.pro_monthly,
+      tier: "pro",
     },
     {
       name: "Enterprise",
@@ -60,11 +80,70 @@ const Pricing = () => {
         "Custom branding",
         "API access",
       ],
-      buttonText: "Hubungi Kami",
+      buttonText: "Upgrade ke Enterprise",
       buttonVariant: "outline" as const,
       popular: false,
+      priceId: STRIPE_PRICES.enterprise_monthly,
+      tier: "enterprise",
     },
   ];
+
+  const handleSubscribe = async (
+    priceId: string | null,
+    tier: string,
+    planName: string
+  ) => {
+    // If free plan, just redirect to signup
+    if (!priceId) {
+      navigate("/auth");
+      return;
+    }
+
+    // Check if user is logged in
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Silakan login terlebih dahulu untuk melakukan upgrade",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
+
+    setLoading(tier);
+
+    try {
+      // Call Edge Function to create checkout session
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout",
+        {
+          body: {
+            priceId,
+            plan: tier,
+          },
+        }
+      );
+
+      if (error) throw error;
+
+      if (!data?.url) {
+        throw new Error("No checkout URL returned");
+      }
+
+      // Redirect to Stripe Checkout
+      window.location.href = data.url;
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      toast({
+        title: "Error",
+        description:
+          error.message || "Gagal membuat checkout session. Silakan coba lagi.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
 
   return (
     <GuestLayout>
@@ -75,6 +154,9 @@ const Pricing = () => {
 
           <div className="container mx-auto px-4 relative z-10">
             <div className="text-center max-w-3xl mx-auto">
+              <Badge variant="outline" className="mb-4">
+                Simple Pricing
+              </Badge>
               <h1 className="text-4xl md:text-5xl font-bold mb-4">
                 Pilih Paket yang Sesuai
               </h1>
@@ -100,6 +182,7 @@ const Pricing = () => {
                 >
                   {plan.popular && (
                     <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 px-4">
+                      <Crown className="w-3 h-3 mr-1" />
                       Paling Populer
                     </Badge>
                   )}
@@ -124,11 +207,23 @@ const Pricing = () => {
                         </li>
                       ))}
                     </ul>
-                    <Link to="/auth" className="block">
-                      <Button variant={plan.buttonVariant} className="w-full">
-                        {plan.buttonText}
-                      </Button>
-                    </Link>
+                    <Button
+                      variant={plan.buttonVariant}
+                      className="w-full"
+                      onClick={() =>
+                        handleSubscribe(plan.priceId, plan.tier, plan.name)
+                      }
+                      disabled={loading === plan.tier}
+                    >
+                      {loading === plan.tier ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        plan.buttonText
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -155,11 +250,15 @@ const Pricing = () => {
                 },
                 {
                   q: "Bisa upgrade atau downgrade?",
-                  a: "Ya, Anda bisa mengubah paket kapanpun. Perubahan akan berlaku di periode billing berikutnya.",
+                  a: "Ya, Anda bisa mengubah paket kapanpun melalui Billing Portal. Perubahan akan berlaku di periode billing berikutnya.",
                 },
                 {
                   q: "Bagaimana cara pembayaran?",
-                  a: "Kami menerima berbagai metode pembayaran termasuk kartu kredit, transfer bank, dan e-wallet. (Coming Soon)",
+                  a: "Kami menggunakan Stripe untuk pemrosesan pembayaran yang aman. Menerima semua kartu kredit/debit utama.",
+                },
+                {
+                  q: "Apakah ada kontrak jangka panjang?",
+                  a: "Tidak, semua paket berbasis bulanan dan bisa dibatalkan kapan saja tanpa penalti.",
                 },
               ].map((faq) => (
                 <Card key={faq.q} className="bg-card/50">
@@ -169,6 +268,28 @@ const Pricing = () => {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Trust Badges */}
+        <section className="py-12">
+          <div className="container mx-auto px-4">
+            <div className="max-w-3xl mx-auto">
+              <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span>Secure Payment via Stripe</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span>Cancel Anytime</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span>30-Day Money Back</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>

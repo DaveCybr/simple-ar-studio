@@ -1,5 +1,6 @@
+// src/pages/Dashboard.tsx - UPDATED dengan Billing Tab
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ARProjectList } from "@/components/ARProjectList";
-import { Scan, Upload, Layers, LogOut, Crown, Loader2 } from "lucide-react";
+import {
+  Scan,
+  Upload,
+  Layers,
+  LogOut,
+  Crown,
+  Loader2,
+  CreditCard,
+} from "lucide-react";
 import { ARProjectForm } from "@/components/ARProjectForm";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -27,6 +36,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { BillingSettings } from "@/components/BillingSetting";
+import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
   avatar_url: any;
@@ -36,11 +47,14 @@ interface Profile {
   subscription_tier: "free" | "pro" | "enterprise";
   upload_quota: number;
   uploads_used: number;
+  stripe_customer_id: string | null;
 }
 
 const Dashboard = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const [refreshKey, setRefreshKey] = useState(0);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -73,6 +87,41 @@ const Dashboard = () => {
       fetchProfile();
     }
   }, [user]);
+
+  // Check for success/canceled payment redirect
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+
+    if (success === "true") {
+      toast({
+        title: "Payment Successful! 🎉",
+        description: "Your subscription has been activated. Welcome to Pro!",
+      });
+      // Remove query params
+      window.history.replaceState({}, "", "/dashboard");
+      // Refresh profile to get updated tier
+      if (user) {
+        supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single()
+          .then(({ data }) => {
+            if (data) setProfile(data);
+          });
+      }
+    }
+
+    if (canceled === "true") {
+      toast({
+        title: "Payment Canceled",
+        description: "You can upgrade anytime from the pricing page.",
+        variant: "default",
+      });
+      window.history.replaceState({}, "", "/dashboard");
+    }
+  }, [searchParams, user, toast]);
 
   const handleSelectProject = (projectId: string) => {
     navigate(`/view/${projectId}`);
@@ -258,9 +307,9 @@ const Dashboard = () => {
           )}
         </Card>
 
-        {/* Main Content */}
+        {/* Main Content - UPDATED TABS */}
         <Tabs defaultValue="list" className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
+          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3 mb-8">
             <TabsTrigger value="list" className="flex items-center gap-2">
               <Layers className="w-4 h-4" />
               Project AR
@@ -272,6 +321,10 @@ const Dashboard = () => {
             >
               <Upload className="w-4 h-4" />
               Buat Project
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4" />
+              Billing
             </TabsTrigger>
           </TabsList>
 
@@ -304,6 +357,18 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* ✅ NEW: Billing Tab */}
+          <TabsContent value="billing" className="flex justify-center">
+            <div className="w-full max-w-2xl">
+              <BillingSettings
+                subscriptionTier={profile?.subscription_tier || "free"}
+                uploadQuota={profile?.upload_quota || 3}
+                uploadsUsed={profile?.uploads_used || 0}
+                stripeCustomerId={profile?.stripe_customer_id || null}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
