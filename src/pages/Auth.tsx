@@ -1,3 +1,4 @@
+// src/pages/Auth.tsx - Updated with Forgot Password
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,13 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Scan, Loader2, Mail, Lock, User } from "lucide-react";
 import { z } from "zod";
@@ -31,7 +39,11 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
 
-  // Redirect if already logged in
+  // Forgot Password State
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+
   useEffect(() => {
     if (!authLoading && user) {
       navigate("/dashboard");
@@ -134,7 +146,7 @@ const Auth = () => {
     setGoogleLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
@@ -152,7 +164,6 @@ const Auth = () => {
           variant: "destructive",
         });
       }
-      // Redirect akan otomatis dilakukan oleh Supabase
     } catch (error) {
       toast({
         title: "Error",
@@ -162,6 +173,47 @@ const Auth = () => {
     } finally {
       setGoogleLoading(false);
     }
+  };
+
+  // ✅ NEW: Handle Forgot Password
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      emailSchema.parse(resetEmail);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        toast({
+          title: "Error",
+          description: err.errors[0].message,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setResetLoading(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/auth?reset=true`,
+    });
+
+    if (error) {
+      toast({
+        title: "Reset Password Gagal",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Email Terkirim",
+        description: "Silakan cek email Anda untuk link reset password",
+      });
+      setForgotPasswordOpen(false);
+      setResetEmail("");
+    }
+
+    setResetLoading(false);
   };
 
   return (
@@ -268,6 +320,19 @@ const Auth = () => {
                     />
                   </div>
                 </div>
+
+                {/* ✅ NEW: Forgot Password Link */}
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="px-0 text-xs"
+                    onClick={() => setForgotPasswordOpen(true)}
+                  >
+                    Lupa password?
+                  </Button>
+                </div>
+
                 <Button
                   type="submit"
                   className="w-full"
@@ -341,6 +406,54 @@ const Auth = () => {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* ✅ NEW: Forgot Password Dialog */}
+      <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Masukkan email Anda dan kami akan mengirimkan link untuk reset
+              password
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="reset-email"
+                  type="email"
+                  placeholder="nama@email.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="pl-10"
+                  required
+                  disabled={resetLoading}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForgotPasswordOpen(false)}
+                disabled={resetLoading}
+                className="flex-1"
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={resetLoading} className="flex-1">
+                {resetLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Kirim Link
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
