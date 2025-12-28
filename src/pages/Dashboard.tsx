@@ -1,4 +1,4 @@
-// src/pages/Dashboard.tsx - UPDATED dengan Billing Tab
+// src/pages/Dashboard.tsx - FIXED VERSION
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,7 +51,7 @@ interface Profile {
 }
 
 const Dashboard = () => {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -61,34 +61,42 @@ const Dashboard = () => {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-    }
-  }, [user, authLoading, navigate]);
-
+  // ✅ Fetch profile on mount
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      if (data && !error) {
-        setProfile(data);
+      if (!user) {
+        setProfileLoading(false);
+        return;
       }
-      setProfileLoading(false);
+
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat profil. Silakan refresh halaman.",
+          variant: "destructive",
+        });
+      } finally {
+        setProfileLoading(false);
+      }
     };
 
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
+    fetchProfile();
+  }, [user, toast]);
 
-  // Check for success/canceled payment redirect
+  // ✅ Handle payment success/cancel redirect
   useEffect(() => {
     const success = searchParams.get("success");
     const canceled = searchParams.get("canceled");
@@ -96,11 +104,13 @@ const Dashboard = () => {
     if (success === "true") {
       toast({
         title: "Payment Successful! 🎉",
-        description: "Your subscription has been activated. Welcome to Pro!",
+        description: "Your subscription has been activated.",
       });
+
       // Remove query params
       window.history.replaceState({}, "", "/dashboard");
-      // Refresh profile to get updated tier
+
+      // Refresh profile
       if (user) {
         supabase
           .from("profiles")
@@ -149,12 +159,23 @@ const Dashboard = () => {
 
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
-    await signOut();
-    setIsLoggingOut(false);
-    navigate("/");
+    try {
+      await signOut();
+      navigate("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Error",
+        description: "Gagal logout. Silakan coba lagi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
-  if (authLoading || profileLoading) {
+  // ✅ Show loading only while checking profile
+  if (profileLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -178,13 +199,16 @@ const Dashboard = () => {
     ? profile.uploads_used < profile.upload_quota ||
       profile.subscription_tier === "enterprise"
     : false;
+
   const uploadProgress = profile
     ? (profile.uploads_used / profile.upload_quota) * 100
     : 0;
+
   const maxMarkers = tierMarkerLimits[profile?.subscription_tier || "free"];
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -195,20 +219,16 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={
-                  profile?.subscription_tier === "free"
-                    ? "secondary"
-                    : "default"
-                }
-              >
-                {profile?.subscription_tier === "enterprise" && (
-                  <Crown className="w-3 h-3 mr-1" />
-                )}
-                {tierLabels[profile?.subscription_tier || "free"]}
-              </Badge>
-            </div>
+            <Badge
+              variant={
+                profile?.subscription_tier === "free" ? "secondary" : "default"
+              }
+            >
+              {profile?.subscription_tier === "enterprise" && (
+                <Crown className="w-3 h-3 mr-1" />
+              )}
+              {tierLabels[profile?.subscription_tier || "free"]}
+            </Badge>
 
             <div className="flex items-center gap-3">
               <Avatar className="h-8 w-8">
@@ -238,14 +258,13 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Logout Confirmation Dialog */}
+      {/* Logout Dialog */}
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Konfirmasi Logout</AlertDialogTitle>
             <AlertDialogDescription>
-              Apakah Anda yakin ingin keluar dari akun Anda? Anda perlu login
-              kembali untuk mengakses dashboard.
+              Apakah Anda yakin ingin keluar dari akun Anda?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -271,8 +290,9 @@ const Dashboard = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Quota Card */}
+      {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
+        {/* Quota Card */}
         <Card className="mb-8">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -307,7 +327,7 @@ const Dashboard = () => {
           )}
         </Card>
 
-        {/* Main Content - UPDATED TABS */}
+        {/* Tabs */}
         <Tabs defaultValue="list" className="w-full">
           <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3 mb-8">
             <TabsTrigger value="list" className="flex items-center gap-2">
@@ -359,15 +379,26 @@ const Dashboard = () => {
             )}
           </TabsContent>
 
-          {/* ✅ NEW: Billing Tab */}
+          {/* ✅ BILLING TAB - FIXED */}
           <TabsContent value="billing" className="flex justify-center">
             <div className="w-full max-w-2xl">
-              <BillingSettings
-                subscriptionTier={profile?.subscription_tier || "free"}
-                uploadQuota={profile?.upload_quota || 3}
-                uploadsUsed={profile?.uploads_used || 0}
-                stripeCustomerId={profile?.stripe_customer_id || null}
-              />
+              {profile ? (
+                <BillingSettings
+                  subscriptionTier={profile.subscription_tier}
+                  uploadQuota={profile.upload_quota}
+                  uploadsUsed={profile.uploads_used}
+                  stripeCustomerId={profile.stripe_customer_id}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      Memuat informasi billing...
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </TabsContent>
         </Tabs>

@@ -1,4 +1,4 @@
-// src/pages/Pricing.tsx - Updated with Stripe Integration
+// src/pages/Pricing.tsx - Fixed Version
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Scan, Check, ArrowLeft, Loader2, Crown } from "lucide-react";
+import { Check, Loader2, Crown, Sparkles } from "lucide-react";
 import { GuestLayout } from "@/components/layouts/GuestLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,80 +22,90 @@ const Pricing = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
 
-  // Stripe Price IDs - GANTI INI DENGAN PRICE ID DARI STRIPE DASHBOARD
-  const STRIPE_PRICES = {
-    pro_monthly: "price_1234567890", // Ganti dengan Price ID Stripe mu
-    enterprise_monthly: "price_0987654321", // Ganti dengan Price ID Stripe mu
-  };
-
   const plans = [
     {
-      name: "Free",
-      price: "Rp 0",
-      period: "/bulan",
-      description: "Untuk pemula yang ingin mencoba",
-      features: [
-        "3 upload per bulan",
-        "Lihat AR unlimited",
-        "Dukungan video & gambar",
-        "Akses web-based",
-      ],
-      buttonText: "Mulai Gratis",
-      buttonVariant: "outline" as const,
-      popular: false,
+      name: "Demo",
+      price: "$0",
+      period: "/month",
+      description: "14 days without adding your card",
       priceId: null,
-      tier: "free",
-    },
-    {
-      name: "Pro",
-      price: "Rp 99.000",
-      period: "/bulan",
-      description: "Untuk kreator dan bisnis kecil",
-      features: [
-        "50 upload per bulan",
-        "Lihat AR unlimited",
-        "Dukungan video & gambar",
-        "Akses web-based",
-        "Prioritas support",
-        "Analytics dasar",
-      ],
-      buttonText: "Upgrade ke Pro",
-      buttonVariant: "default" as const,
-      popular: true,
-      priceId: STRIPE_PRICES.pro_monthly,
-      tier: "pro",
-    },
-    {
-      name: "Enterprise",
-      price: "Rp 499.000",
-      period: "/bulan",
-      description: "Untuk bisnis dan tim besar",
-      features: [
-        "Upload unlimited",
-        "Lihat AR unlimited",
-        "Dukungan video & gambar",
-        "Akses web-based",
-        "Prioritas support 24/7",
-        "Analytics lengkap",
-        "Custom branding",
-        "API access",
-      ],
-      buttonText: "Upgrade ke Enterprise",
+      plan: "demo",
+      buttonText: "Start for FREE",
       buttonVariant: "outline" as const,
-      popular: false,
-      priceId: STRIPE_PRICES.enterprise_monthly,
-      tier: "enterprise",
+      features: [
+        "Full access to the Pro functions",
+        "Views / Scans QR - unlimited",
+        "Number of projects / AR-photos - unlimited",
+      ],
+      limitations: [
+        "Project storage - 20 days",
+        "Access to the platform - 14 days",
+        "Watermark - all projects",
+        "Account Manager - no",
+      ],
+    },
+    {
+      name: "PRO",
+      price: "$29",
+      period: "/month",
+      yearlyPrice: "$24/mo if billed year",
+      priceId: "price_1SjLd62LSlGk7TpH1yaPXeVN", // <-- Ganti dengan Price ID dari Stripe
+      plan: "pro",
+      popular: true,
+      buttonText: "Buy now PRO",
+      buttonVariant: "default" as const,
+      features: [
+        "Full access to the Pro functions",
+        "Views / Scans QR per month - unlimited",
+        "Number of projects /AR-photos - 20",
+        "Project storage - unlimited",
+        "Access to the platform - 1 month",
+        "Watermark - no",
+        "Account Manager - yes",
+        "Top up of projects / photos - yes",
+      ],
+    },
+    {
+      name: "PRO+",
+      price: "$39",
+      period: "/month",
+      yearlyPrice: "$32/mo if billed year",
+      priceId: "price_1SjLd62LSlGk7TpH1yaPXeVN", // <-- Ganti dengan Price ID dari Stripe
+      plan: "pro_plus",
+      badge: "NEW",
+      buttonText: "Buy now PRO+",
+      buttonVariant: "default" as const,
+      features: [
+        "Full access to the Pro functions",
+        "Views / Scans QR per month - unlimited",
+        "Number of projects /AR-photos - 30",
+        "Project storage - unlimited",
+        "Access to the platform - 1 year",
+        "Watermark - no",
+        "Account Manager - yes",
+        "Top up of projects / photos - yes",
+        "Video Editor",
+        "Instant Code Generation",
+        "Priority Upload to Servers",
+        "QR Placement on Photos",
+        "Public Link",
+        "Analytics",
+      ],
     },
   ];
 
   const handleSubscribe = async (
     priceId: string | null,
-    tier: string,
+    planType: string,
     planName: string
   ) => {
-    // If free plan, just redirect to signup
+    // If free plan, just redirect to signup/dashboard
     if (!priceId) {
-      navigate("/auth");
+      if (!user) {
+        navigate("/auth");
+      } else {
+        navigate("/dashboard");
+      }
       return;
     }
 
@@ -103,32 +113,39 @@ const Pricing = () => {
     if (!user) {
       toast({
         title: "Login Required",
-        description: "Silakan login terlebih dahulu untuk melakukan upgrade",
+        description: "Please login first to upgrade your plan",
         variant: "destructive",
       });
       navigate("/auth");
       return;
     }
 
-    setLoading(tier);
+    setLoading(planType);
 
     try {
+      console.log("Starting checkout with:", { priceId, plan: planType });
+
       // Call Edge Function to create checkout session
       const { data, error } = await supabase.functions.invoke(
         "create-checkout",
         {
           body: {
             priceId,
-            plan: tier,
+            plan: planType,
           },
         }
       );
 
-      if (error) throw error;
+      if (error) {
+        console.error("Checkout error details:", error);
+        throw error;
+      }
 
       if (!data?.url) {
         throw new Error("No checkout URL returned");
       }
+
+      console.log("Redirecting to Stripe Checkout:", data.url);
 
       // Redirect to Stripe Checkout
       window.location.href = data.url;
@@ -137,7 +154,8 @@ const Pricing = () => {
       toast({
         title: "Error",
         description:
-          error.message || "Gagal membuat checkout session. Silakan coba lagi.",
+          error.message ||
+          "Failed to create checkout session. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -158,10 +176,10 @@ const Pricing = () => {
                 Simple Pricing
               </Badge>
               <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                Pilih Paket yang Sesuai
+                Choose the Right Plan for You
               </h1>
               <p className="text-lg text-muted-foreground">
-                Mulai gratis, upgrade kapanpun sesuai kebutuhan Anda
+                Start free, upgrade anytime as your needs grow
               </p>
             </div>
           </div>
@@ -170,52 +188,62 @@ const Pricing = () => {
         {/* Pricing Cards */}
         <section className="pb-20">
           <div className="container mx-auto px-4">
-            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               {plans.map((plan) => (
                 <Card
                   key={plan.name}
                   className={`relative ${
                     plan.popular
-                      ? "border-primary shadow-lg shadow-primary/10 scale-105"
+                      ? "border-primary shadow-lg shadow-primary/10 md:scale-105"
                       : "border-border"
                   }`}
                 >
                   {plan.popular && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 px-4">
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-orange-500">
                       <Crown className="w-3 h-3 mr-1" />
-                      Paling Populer
+                      POPULAR
                     </Badge>
                   )}
-                  <CardHeader className="text-center pb-2">
-                    <CardTitle className="text-xl">{plan.name}</CardTitle>
-                    <CardDescription>{plan.description}</CardDescription>
-                    <div className="pt-4">
-                      <span className="text-4xl font-bold">{plan.price}</span>
-                      <span className="text-muted-foreground">
-                        {plan.period}
-                      </span>
+
+                  {plan.badge && !plan.popular && (
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-orange-500">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      {plan.badge}
+                    </Badge>
+                  )}
+
+                  <CardHeader className="text-center pb-4">
+                    <CardTitle className="text-2xl font-bold">
+                      {plan.name}
+                    </CardTitle>
+                    <CardDescription className="text-sm mt-2">
+                      {plan.description}
+                    </CardDescription>
+                    <div className="pt-6">
+                      <div className="flex items-baseline justify-center gap-1">
+                        <span className="text-4xl font-bold">{plan.price}</span>
+                        <span className="text-muted-foreground text-base">
+                          {plan.period}
+                        </span>
+                      </div>
+                      {plan.yearlyPrice && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {plan.yearlyPrice}
+                        </p>
+                      )}
                     </div>
                   </CardHeader>
+
                   <CardContent className="space-y-6">
-                    <ul className="space-y-3">
-                      {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-3">
-                          <div className="p-1 rounded-full bg-primary/10">
-                            <Check className="w-3 h-3 text-primary" />
-                          </div>
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
                     <Button
                       variant={plan.buttonVariant}
-                      className="w-full"
+                      className="w-full h-12 text-base font-semibold"
                       onClick={() =>
-                        handleSubscribe(plan.priceId, plan.tier, plan.name)
+                        handleSubscribe(plan.priceId, plan.plan, plan.name)
                       }
-                      disabled={loading === plan.tier}
+                      disabled={loading === plan.plan}
                     >
-                      {loading === plan.tier ? (
+                      {loading === plan.plan ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Processing...
@@ -224,6 +252,36 @@ const Pricing = () => {
                         plan.buttonText
                       )}
                     </Button>
+
+                    <ul className="space-y-3">
+                      {plan.features.map((feature, index) => (
+                        <li key={index} className="flex items-start gap-3">
+                          <div className="mt-0.5 p-1 rounded-full bg-green-100 dark:bg-green-900/30">
+                            <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                          </div>
+                          <span className="text-sm text-foreground/80 flex-1">
+                            {feature}
+                          </span>
+                        </li>
+                      ))}
+
+                      {plan.limitations &&
+                        plan.limitations.map((limitation, index) => (
+                          <li
+                            key={`limit-${index}`}
+                            className="flex items-start gap-3 opacity-60"
+                          >
+                            <div className="mt-0.5 p-1 rounded-full bg-red-100 dark:bg-red-900/30">
+                              <span className="text-xs text-red-600 dark:text-red-400">
+                                ✗
+                              </span>
+                            </div>
+                            <span className="text-sm line-through text-muted-foreground flex-1">
+                              {limitation}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
                   </CardContent>
                 </Card>
               ))}
@@ -235,30 +293,30 @@ const Pricing = () => {
         <section className="py-16 bg-muted/30">
           <div className="container mx-auto px-4">
             <h2 className="text-2xl font-bold text-center mb-12">
-              Pertanyaan Umum
+              Frequently Asked Questions
             </h2>
 
             <div className="max-w-2xl mx-auto space-y-6">
               {[
                 {
-                  q: "Apa yang dimaksud dengan upload?",
-                  a: "Upload adalah setiap kali Anda mengunggah marker baru beserta kontennya (video atau gambar) ke platform.",
+                  q: "What counts as an upload?",
+                  a: "An upload is each time you create a new AR marker with its content (video or image) on the platform.",
                 },
                 {
-                  q: "Apakah lihat AR dihitung?",
-                  a: "Tidak! Semua paket termasuk unlimited views. Anda dan siapapun bisa scan AR tanpa batasan.",
+                  q: "Are AR views counted?",
+                  a: "No! All plans include unlimited views. You and anyone can scan AR without limitations.",
                 },
                 {
-                  q: "Bisa upgrade atau downgrade?",
-                  a: "Ya, Anda bisa mengubah paket kapanpun melalui Billing Portal. Perubahan akan berlaku di periode billing berikutnya.",
+                  q: "Can I upgrade or downgrade?",
+                  a: "Yes, you can change your plan anytime through the Billing Portal. Changes will take effect in the next billing period.",
                 },
                 {
-                  q: "Bagaimana cara pembayaran?",
-                  a: "Kami menggunakan Stripe untuk pemrosesan pembayaran yang aman. Menerima semua kartu kredit/debit utama.",
+                  q: "How does payment work?",
+                  a: "We use Stripe for secure payment processing. Accepts all major credit/debit cards.",
                 },
                 {
-                  q: "Apakah ada kontrak jangka panjang?",
-                  a: "Tidak, semua paket berbasis bulanan dan bisa dibatalkan kapan saja tanpa penalti.",
+                  q: "Is there a long-term contract?",
+                  a: "No, all plans are monthly-based and can be canceled anytime without penalty.",
                 },
               ].map((faq) => (
                 <Card key={faq.q} className="bg-card/50">
@@ -287,7 +345,7 @@ const Pricing = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-green-600" />
-                  <span>30-Day Money Back</span>
+                  <span>14-Day Free Trial</span>
                 </div>
               </div>
             </div>

@@ -1,19 +1,24 @@
+// src/components/UserWrapper.tsx - FIXED VERSION
 import { useAuth } from "@/contexts/AuthContext";
 import { ReactNode, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-export const UserWrapper = ({ children }: { children: ReactNode }) => {
+interface UserWrapperProps {
+  children: ReactNode;
+}
+
+export const UserWrapper = ({ children }: UserWrapperProps) => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect authenticated users to dashboard
   useEffect(() => {
+    // ✅ Hanya redirect jika user SUDAH LOGIN dan tidak loading
     if (!loading && user) {
       navigate("/dashboard", { replace: true });
     }
   }, [user, loading, navigate]);
 
-  // ✅ FIX: Hanya tampilkan loading saat masih mengecek auth
+  // ✅ Show loading saat masih checking auth
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -22,6 +27,11 @@ export const UserWrapper = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  // ✅ Tampilkan children untuk user yang belum login
+  // ✅ Jika user sudah login, jangan render children (akan redirect)
+  if (user) {
+    return null;
+  }
+
+  // ✅ Render children hanya untuk guest (user belum login)
   return <>{children}</>;
 };
