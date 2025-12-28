@@ -14,17 +14,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ARProjectList } from "@/components/ARProjectList";
-import {
-  Scan,
-  Upload,
-  Layers,
-  LogOut,
-  User,
-  Crown,
-  Loader2,
-} from "lucide-react";
+import { Scan, Upload, Layers, LogOut, Crown, Loader2 } from "lucide-react";
 import { ARProjectForm } from "@/components/ARProjectForm";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Profile {
   avatar_url: any;
@@ -42,6 +44,8 @@ const Dashboard = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -90,8 +94,14 @@ const Dashboard = () => {
     }
   };
 
-  const handleSignOut = async () => {
+  const handleLogoutClick = () => {
+    setShowLogoutDialog(true);
+  };
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
     await signOut();
+    setIsLoggingOut(false);
     navigate("/");
   };
 
@@ -172,12 +182,46 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+            <Button variant="ghost" size="sm" onClick={handleLogoutClick}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
       </header>
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin keluar dari akun Anda? Anda perlu login
+              kembali untuk mengakses dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoggingOut}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmLogout}
+              disabled={isLoggingOut}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isLoggingOut ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Logging out...
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Ya, Logout
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Quota Card */}
       <div className="container mx-auto px-4 py-6">
         <Card className="mb-8">

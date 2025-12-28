@@ -42,14 +42,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     try {
-      // Try local scope first (removes session from current tab only)
-      await supabase.auth.signOut({ scope: "local" });
-    } catch (error) {
-      console.error("Logout error:", error);
-
-      // If logout fails, clear local state anyway
+      // Clear local state first (optimistic update)
       setUser(null);
       setSession(null);
+
+      // Then attempt server-side signout
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (error: any) {
+      console.error("Logout error:", error);
+
+      // If it's a session_not_found error, we can safely ignore it
+      // because the session is already gone on the server
+      if (error?.message?.includes("session_not_found")) {
+        console.log(
+          "Session already invalidated on server, clearing local state"
+        );
+      }
 
       // Force clear local storage as fallback
       try {
