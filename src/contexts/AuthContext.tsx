@@ -41,7 +41,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      // Try local scope first (removes session from current tab only)
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.error("Logout error:", error);
+
+      // If logout fails, clear local state anyway
+      setUser(null);
+      setSession(null);
+
+      // Force clear local storage as fallback
+      try {
+        const keys = Object.keys(localStorage);
+        keys.forEach((key) => {
+          if (key.startsWith("sb-") || key.includes("supabase")) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch (e) {
+        console.error("Failed to clear storage:", e);
+      }
+    }
   };
 
   return (
