@@ -1,4 +1,4 @@
-// src/pages/Auth.tsx - Updated with Forgot Password
+// src/pages/Auth.tsx - Improved with Password Confirmation & Better UX
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +23,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Scan, Loader2, Mail, Lock, User } from "lucide-react";
+import {
+  Scan,
+  Loader2,
+  Mail,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Email tidak valid");
@@ -35,14 +45,32 @@ const Auth = () => {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+
+  // Login State
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // Signup State
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Forgot Password State
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
+
+  // Password strength indicator
+  const [passwordStrength, setPasswordStrength] = useState<{
+    score: number;
+    label: string;
+    color: string;
+  }>({ score: 0, label: "", color: "" });
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -50,12 +78,38 @@ const Auth = () => {
     }
   }, [user, authLoading, navigate]);
 
+  // Calculate password strength
+  useEffect(() => {
+    if (signupPassword.length === 0) {
+      setPasswordStrength({ score: 0, label: "", color: "" });
+      return;
+    }
+
+    let score = 0;
+    if (signupPassword.length >= 6) score++;
+    if (signupPassword.length >= 8) score++;
+    if (/[a-z]/.test(signupPassword) && /[A-Z]/.test(signupPassword)) score++;
+    if (/\d/.test(signupPassword)) score++;
+    if (/[^a-zA-Z\d]/.test(signupPassword)) score++;
+
+    const strengths = [
+      { score: 1, label: "Lemah", color: "bg-red-500" },
+      { score: 2, label: "Cukup", color: "bg-orange-500" },
+      { score: 3, label: "Baik", color: "bg-yellow-500" },
+      { score: 4, label: "Kuat", color: "bg-green-500" },
+      { score: 5, label: "Sangat Kuat", color: "bg-green-600" },
+    ];
+
+    const strength = strengths.find((s) => s.score === score) || strengths[0];
+    setPasswordStrength(strength);
+  }, [signupPassword]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      emailSchema.parse(email);
-      passwordSchema.parse(password);
+      emailSchema.parse(loginEmail);
+      passwordSchema.parse(loginPassword);
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast({
@@ -69,14 +123,17 @@ const Auth = () => {
 
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: loginEmail,
+      password: loginPassword,
     });
 
     if (error) {
       toast({
         title: "Login Gagal",
-        description: error.message,
+        description:
+          error.message === "Invalid login credentials"
+            ? "Email atau password salah"
+            : error.message,
         variant: "destructive",
       });
     } else {
@@ -92,9 +149,10 @@ const Auth = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation
     try {
-      emailSchema.parse(email);
-      passwordSchema.parse(password);
+      emailSchema.parse(signupEmail);
+      passwordSchema.parse(signupPassword);
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast({
@@ -106,15 +164,34 @@ const Auth = () => {
       }
     }
 
+    if (signupPassword !== confirmPassword) {
+      toast({
+        title: "Password Tidak Cocok",
+        description: "Password dan konfirmasi password harus sama",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (passwordStrength.score < 2) {
+      toast({
+        title: "Password Terlalu Lemah",
+        description:
+          "Gunakan password yang lebih kuat untuk keamanan akun Anda",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     const redirectUrl = `${window.location.origin}/dashboard`;
 
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
+      email: signupEmail,
+      password: signupPassword,
       options: {
         emailRedirectTo: redirectUrl,
-        data: { full_name: fullName },
+        data: { full_name: fullName || signupEmail.split("@")[0] },
       },
     });
 
@@ -134,8 +211,8 @@ const Auth = () => {
       }
     } else {
       toast({
-        title: "Berhasil Daftar",
-        description: "Akun Anda telah dibuat!",
+        title: "Berhasil Daftar! 🎉",
+        description: "Akun Anda telah dibuat. Selamat datang!",
       });
       navigate("/dashboard");
     }
@@ -175,7 +252,6 @@ const Auth = () => {
     }
   };
 
-  // ✅ NEW: Handle Forgot Password
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -195,7 +271,7 @@ const Auth = () => {
     setResetLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/auth?reset=true`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
 
     if (error) {
@@ -205,16 +281,26 @@ const Auth = () => {
         variant: "destructive",
       });
     } else {
+      setResetEmailSent(true);
       toast({
-        title: "Email Terkirim",
-        description: "Silakan cek email Anda untuk link reset password",
+        title: "Email Terkirim! ✉️",
+        description: "Silakan cek inbox atau folder spam Anda",
       });
-      setForgotPasswordOpen(false);
-      setResetEmail("");
     }
 
     setResetLoading(false);
   };
+
+  const handleDialogClose = () => {
+    setForgotPasswordOpen(false);
+    setResetEmailSent(false);
+    setResetEmail("");
+  };
+
+  const passwordsMatch =
+    signupPassword && confirmPassword && signupPassword === confirmPassword;
+  const passwordsDontMatch =
+    confirmPassword && signupPassword !== confirmPassword;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -296,8 +382,8 @@ const Auth = () => {
                       id="login-email"
                       type="email"
                       placeholder="nama@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
                       className="pl-10"
                       required
                       disabled={loading || googleLoading}
@@ -310,23 +396,34 @@ const Auth = () => {
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="login-password"
-                      type="password"
+                      type={showLoginPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="pl-10 pr-10"
                       required
                       disabled={loading || googleLoading}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                      disabled={loading || googleLoading}
+                    >
+                      {showLoginPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
-                {/* ✅ NEW: Forgot Password Link */}
                 <div className="flex justify-end">
                   <Button
                     type="button"
                     variant="link"
-                    className="px-0 text-xs"
+                    className="px-0 text-xs h-auto"
                     onClick={() => setForgotPasswordOpen(true)}
                   >
                     Lupa password?
@@ -347,7 +444,7 @@ const Auth = () => {
             <TabsContent value="signup">
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-name">Nama Lengkap</Label>
+                  <Label htmlFor="signup-name">Nama Lengkap (Opsional)</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -369,8 +466,8 @@ const Auth = () => {
                       id="signup-email"
                       type="email"
                       placeholder="nama@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
                       className="pl-10"
                       required
                       disabled={loading || googleLoading}
@@ -383,20 +480,103 @@ const Auth = () => {
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
-                      type="password"
+                      type={showSignupPassword ? "text" : "password"}
                       placeholder="Minimal 6 karakter"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      className="pl-10 pr-10"
                       required
                       disabled={loading || googleLoading}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupPassword(!showSignupPassword)}
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                      disabled={loading || googleLoading}
+                    >
+                      {showSignupPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
+                  {/* Password Strength Indicator */}
+                  {signupPassword && (
+                    <div className="space-y-1">
+                      <div className="flex gap-1 h-1">
+                        {[1, 2, 3, 4, 5].map((level) => (
+                          <div
+                            key={level}
+                            className={`flex-1 rounded-full transition-colors ${
+                              level <= passwordStrength.score
+                                ? passwordStrength.color
+                                : "bg-gray-200"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Kekuatan password:{" "}
+                        <span className="font-medium">
+                          {passwordStrength.label}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Konfirmasi Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Ketik ulang password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="pl-10 pr-10"
+                      required
+                      disabled={loading || googleLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                      disabled={loading || googleLoading}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  {/* Password Match Indicator */}
+                  {confirmPassword && (
+                    <div className="flex items-center gap-2 text-xs">
+                      {passwordsMatch ? (
+                        <>
+                          <CheckCircle2 className="h-3 w-3 text-green-600" />
+                          <span className="text-green-600">Password cocok</span>
+                        </>
+                      ) : passwordsDontMatch ? (
+                        <>
+                          <XCircle className="h-3 w-3 text-red-600" />
+                          <span className="text-red-600">
+                            Password tidak cocok
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={loading || googleLoading}
+                  disabled={loading || googleLoading || !passwordsMatch}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Daftar
@@ -407,51 +587,78 @@ const Auth = () => {
         </CardContent>
       </Card>
 
-      {/* ✅ NEW: Forgot Password Dialog */}
-      <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
-        <DialogContent>
+      {/* Forgot Password Dialog */}
+      <Dialog open={forgotPasswordOpen} onOpenChange={handleDialogClose}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
             <DialogDescription>
-              Masukkan email Anda dan kami akan mengirimkan link untuk reset
-              password
+              {resetEmailSent
+                ? "Link reset password telah dikirim ke email Anda"
+                : "Masukkan email Anda dan kami akan mengirimkan link untuk reset password"}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleForgotPassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reset-email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="reset-email"
-                  type="email"
-                  placeholder="nama@email.com"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  className="pl-10"
-                  required
-                  disabled={resetLoading}
-                />
+
+          {resetEmailSent ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center p-4 bg-green-50 rounded-lg">
+                <CheckCircle2 className="h-12 w-12 text-green-600" />
               </div>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setForgotPasswordOpen(false)}
-                disabled={resetLoading}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button type="submit" disabled={resetLoading} className="flex-1">
-                {resetLoading && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Kirim Link
+              <div className="text-center space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Email telah dikirim ke <strong>{resetEmail}</strong>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Silakan cek inbox atau folder spam Anda. Link akan expired
+                  dalam 1 jam.
+                </p>
+              </div>
+              <Button onClick={handleDialogClose} className="w-full">
+                Mengerti
               </Button>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="nama@email.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="pl-10"
+                    required
+                    disabled={resetLoading}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDialogClose}
+                  disabled={resetLoading}
+                  className="flex-1"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="flex-1"
+                >
+                  {resetLoading && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Kirim Link
+                </Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
