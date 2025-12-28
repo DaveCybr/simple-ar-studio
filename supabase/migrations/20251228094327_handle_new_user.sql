@@ -1,10 +1,13 @@
 -- Migration: Update handle_new_user function untuk support Google OAuth
--- File: supabase/migrations/20251229000000_update_handle_new_user_google.sql
+-- File: supabase/migrations/20251228094327_handle_new_user.sql
 
--- Drop existing function
+-- Step 1: Drop trigger first (karena trigger depends on function)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+-- Step 2: Now we can safely drop the function
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
--- Create updated function with Google OAuth support
+-- Step 3: Create updated function with Google OAuth support
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -45,12 +48,12 @@ BEGIN
 END;
 $$;
 
--- Recreate trigger
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- Step 4: Recreate trigger
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- Add comment
 COMMENT ON FUNCTION public.handle_new_user() IS 
 'Automatically creates or updates user profile when a new user signs up. 
 Supports both email/password and OAuth (Google, etc.) authentication.';
