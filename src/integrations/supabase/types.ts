@@ -365,7 +365,8 @@ export const isBarcodeMarker = (data: any): data is ARJSBarcodeMarkerData => {
 export const isPresetMarker = (data: any): data is ARJSPresetMarkerData => {
   return (
     isARJSMarkerData(data) &&
-    ["hiro", "kanji"].includes(data.markerType) &&
+    data.markerType !== "pattern" &&
+    data.markerType !== "barcode" &&
     typeof data.preset === "string"
   );
 };
