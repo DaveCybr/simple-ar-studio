@@ -1,276 +1,372 @@
+// src/integrations/supabase/types.ts
+// ✅ UPDATED: Aligned with database schema and ar.types
+
 export type Json =
   | string
   | number
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[]
+  | Json[];
 
-export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
-  }
+export type ARLibrary = "mindar" | "arjs";
+
+export type SubscriptionTier = "demo" | "pro" | "pro_plus";
+
+// ========================================
+// Database Tables
+// ========================================
+
+export interface Database {
   public: {
     Tables: {
-      ar_content: {
-        Row: {
-          content_type: string
-          content_url: string
-          created_at: string
-          id: string
-          marker_url: string
-          mind_file_url: string
-          name: string
-          project_id: string | null
-          scale: number
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          content_type?: string
-          content_url: string
-          created_at?: string
-          id?: string
-          marker_url: string
-          mind_file_url: string
-          name: string
-          project_id?: string | null
-          scale?: number
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          content_type?: string
-          content_url?: string
-          created_at?: string
-          id?: string
-          marker_url?: string
-          mind_file_url?: string
-          name?: string
-          project_id?: string | null
-          scale?: number
-          updated_at?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ar_content_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "ar_projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ar_content_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ar_projects: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          updated_at?: string
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
-          avatar_url: string | null
-          created_at: string
-          email: string | null
-          full_name: string | null
-          id: string
-          stripe_customer_id: string | null
-          subscription_tier: Database["public"]["Enums"]["subscription_tier"]
-          updated_at: string
-          upload_quota: number
-          uploads_used: number
-        }
+          id: string;
+          email: string | null;
+          full_name: string | null;
+          avatar_url: string | null;
+          subscription_tier: SubscriptionTier;
+          upload_quota: number;
+          uploads_used: number;
+          stripe_customer_id: string | null;
+          trial_ends_at: string | null;
+          is_trial_active: boolean | null;
+          created_at: string;
+          updated_at: string;
+        };
         Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string | null
-          id: string
-          stripe_customer_id?: string | null
-          subscription_tier?: Database["public"]["Enums"]["subscription_tier"]
-          updated_at?: string
-          upload_quota?: number
-          uploads_used?: number
-        }
+          id: string;
+          email?: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          subscription_tier?: SubscriptionTier;
+          upload_quota?: number;
+          uploads_used?: number;
+          stripe_customer_id?: string | null;
+          trial_ends_at?: string | null;
+          is_trial_active?: boolean | null;
+          created_at?: string;
+          updated_at?: string;
+        };
         Update: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string | null
-          id?: string
-          stripe_customer_id?: string | null
-          subscription_tier?: Database["public"]["Enums"]["subscription_tier"]
-          updated_at?: string
-          upload_quota?: number
-          uploads_used?: number
-        }
-        Relationships: []
-      }
-    }
+          id?: string;
+          email?: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          subscription_tier?: SubscriptionTier;
+          upload_quota?: number;
+          uploads_used?: number;
+          stripe_customer_id?: string | null;
+          trial_ends_at?: string | null;
+          is_trial_active?: boolean | null;
+          updated_at?: string;
+        };
+      };
+      ar_projects: {
+        Row: {
+          id: string;
+          name: string;
+          library: ARLibrary;
+          user_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          library?: ARLibrary;
+          user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          library?: ARLibrary;
+          updated_at?: string;
+        };
+      };
+      ar_content: {
+        Row: {
+          id: string;
+          name: string;
+          library: ARLibrary;
+          marker_url: string | null; // ✅ Nullable
+          mind_file_url: string | null; // ✅ Nullable
+          marker_data: Json; // ✅ JSONB type
+          content_url: string;
+          content_type: string;
+          scale: number;
+          project_id: string | null;
+          user_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          library?: ARLibrary;
+          marker_url?: string | null;
+          mind_file_url?: string | null;
+          marker_data?: Json;
+          content_url: string;
+          content_type: string;
+          scale?: number;
+          project_id?: string | null;
+          user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          library?: ARLibrary;
+          marker_url?: string | null;
+          mind_file_url?: string | null;
+          marker_data?: Json;
+          content_url?: string;
+          content_type?: string;
+          scale?: number;
+          updated_at?: string;
+        };
+      };
+      ar_analytics: {
+        Row: {
+          id: string;
+          project_id: string | null;
+          user_id: string | null;
+          session_id: string;
+          event_type: string;
+          marker_name: string | null;
+          device_type: string | null;
+          user_agent: string | null;
+          duration: number | null;
+          ip_address: string | null;
+          country: string | null;
+          city: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id?: string | null;
+          user_id?: string | null;
+          session_id: string;
+          event_type: string;
+          marker_name?: string | null;
+          device_type?: string | null;
+          user_agent?: string | null;
+          duration?: number | null;
+          ip_address?: string | null;
+          country?: string | null;
+          city?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          metadata?: Json;
+        };
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      mindar_markers_v2: {
+        Row: {
+          id: string;
+          name: string;
+          marker_url: string | null;
+          mind_file_url: string | null;
+          marker_data: Json;
+          content_url: string;
+          content_type: string;
+          scale: number;
+          project_id: string | null;
+          user_id: string | null;
+          library: ARLibrary;
+          created_at: string;
+          updated_at: string;
+          mind_url_extracted: string | null;
+          target_index: number;
+        };
+      };
+      arjs_markers_v2: {
+        Row: {
+          id: string;
+          name: string;
+          marker_url: string | null;
+          marker_data: Json;
+          content_url: string;
+          content_type: string;
+          scale: number;
+          project_id: string | null;
+          user_id: string | null;
+          library: ARLibrary;
+          created_at: string;
+          updated_at: string;
+          marker_type: string | null;
+          pattern_url: string | null;
+          barcode_value: number;
+          preset: string | null;
+        };
+      };
+      analytics_summary: {
+        Row: {
+          project_id: string | null;
+          user_id: string | null;
+          date: string;
+          views: number;
+          scans: number;
+          unique_sessions: number;
+          avg_duration: number | null;
+          unique_markers_scanned: number;
+        };
+      };
+      active_subscriptions: {
+        Row: {
+          id: string;
+          email: string | null;
+          full_name: string | null;
+          subscription_tier: SubscriptionTier;
+          upload_quota: number;
+          uploads_used: number;
+          status: string;
+          trial_ends_at: string | null;
+          is_trial_active: boolean | null;
+          days_left_in_trial: number | null;
+        };
+      };
+    };
     Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      subscription_tier: "free" | "pro" | "enterprise"
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
+      get_marker_for_viewer: {
+        Args: { marker_id: string };
+        Returns: Json;
+      };
+      get_project_with_markers: {
+        Args: { project_uuid: string };
+        Returns: {
+          project_id: string;
+          project_name: string;
+          library: ARLibrary;
+          marker_count: number;
+          markers: Json;
+        }[];
+      };
+      is_trial_valid: {
+        Args: { user_id: string };
+        Returns: boolean;
+      };
+      fix_existing_marker_data: {
+        Args: {};
+        Returns: {
+          fixed_count: number;
+          invalid_count: number;
+          details: Json;
+        }[];
+      };
+    };
+  };
 }
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+// ========================================
+// Marker Data Type Definitions
+// ========================================
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
-
-export type Tables<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+// MindAR marker data structure
+export interface MindARMarkerData {
+  library: "mindar";
+  mindUrl: string;
+  targetIndex?: number;
 }
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
-    }
-    ? R
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
 
-export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+// AR.js marker data structures
+export interface ARJSPatternMarkerData {
+  library: "arjs";
+  markerType: "pattern";
+  patternUrl: string;
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
 
-export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+export interface ARJSBarcodeMarkerData {
+  library: "arjs";
+  markerType: "barcode";
+  barcodeValue: number; // 0-63
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
 
-export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+export interface ARJSPresetMarkerData {
+  library: "arjs";
+  markerType: "hiro" | "kanji";
+  preset: "hiro" | "kanji";
 }
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
 
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+export type ARJSMarkerData =
+  | ARJSPatternMarkerData
+  | ARJSBarcodeMarkerData
+  | ARJSPresetMarkerData;
+
+export type MarkerData = MindARMarkerData | ARJSMarkerData;
+
+// ========================================
+// Helper Types for Frontend
+// ========================================
+
+export interface ARContentDB {
+  id: string;
+  name: string;
+  library: ARLibrary;
+  marker_url: string | null;
+  mind_file_url: string | null;
+  marker_data: MarkerData;
+  content_url: string;
+  content_type: string;
+  scale: number;
+  project_id: string | null;
+  user_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
 
-export const Constants = {
-  public: {
-    Enums: {
-      subscription_tier: ["free", "pro", "enterprise"],
-    },
-  },
-} as const
+export interface ARProjectDB {
+  id: string;
+  name: string;
+  library: ARLibrary;
+  user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ========================================
+// Type Guards
+// ========================================
+
+export const isMindARMarkerData = (data: any): data is MindARMarkerData => {
+  return data?.library === "mindar" && typeof data?.mindUrl === "string";
+};
+
+export const isARJSMarkerData = (data: any): data is ARJSMarkerData => {
+  return (
+    data?.library === "arjs" &&
+    ["pattern", "barcode", "hiro", "kanji"].includes(data?.markerType)
+  );
+};
+
+export const isPatternMarker = (data: any): data is ARJSPatternMarkerData => {
+  return (
+    isARJSMarkerData(data) &&
+    data.markerType === "pattern" &&
+    typeof data.patternUrl === "string"
+  );
+};
+
+export const isBarcodeMarker = (data: any): data is ARJSBarcodeMarkerData => {
+  return (
+    isARJSMarkerData(data) &&
+    data.markerType === "barcode" &&
+    typeof data.barcodeValue === "number"
+  );
+};
+
+export const isPresetMarker = (data: any): data is ARJSPresetMarkerData => {
+  return (
+    isARJSMarkerData(data) &&
+    data.markerType !== "pattern" &&
+    data.markerType !== "barcode" &&
+    typeof data.preset === "string"
+  );
+};
