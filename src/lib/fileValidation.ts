@@ -1,5 +1,5 @@
 // src/lib/fileValidation.ts
-// ✅ Comprehensive file validation with detailed feedback
+// ✅ FIXED VERSION - Compatible with TypeScript strict mode
 
 export const FILE_LIMITS = {
   VIDEO: {
@@ -9,32 +9,32 @@ export const FILE_LIMITS = {
       "video/webm",
       "video/quicktime",
       "video/x-msvideo",
-    ],
-    ALLOWED_EXTENSIONS: [".mp4", ".webm", ".mov", ".avi"],
+    ] as const,
+    ALLOWED_EXTENSIONS: [".mp4", ".webm", ".mov", ".avi"] as const,
     MAX_DURATION: 120, // 2 minutes
     RECOMMENDED_RESOLUTION: { width: 1280, height: 720 },
     MAX_RESOLUTION: { width: 1920, height: 1080 },
   },
   IMAGE: {
     MAX_SIZE: 10 * 1024 * 1024, // 10MB
-    ALLOWED_TYPES: ["image/jpeg", "image/png", "image/webp"],
-    ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png", ".webp"],
+    ALLOWED_TYPES: ["image/jpeg", "image/png", "image/webp"] as const,
+    ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png", ".webp"] as const,
     MIN_RESOLUTION: { width: 512, height: 512 },
     MAX_RESOLUTION: { width: 4096, height: 4096 },
   },
   MARKER: {
     MAX_SIZE: 5 * 1024 * 1024, // 5MB
-    ALLOWED_TYPES: ["image/jpeg", "image/png"],
-    ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png"],
+    ALLOWED_TYPES: ["image/jpeg", "image/png"] as const,
+    ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png"] as const,
     RECOMMENDED_RESOLUTION: { width: 1024, height: 1024 },
     MIN_RESOLUTION: { width: 300, height: 300 },
   },
   PATTERN: {
     MAX_SIZE: 1 * 1024 * 1024, // 1MB
-    ALLOWED_TYPES: ["text/plain", "application/octet-stream"],
-    ALLOWED_EXTENSIONS: [".patt"],
+    ALLOWED_TYPES: ["text/plain", "application/octet-stream"] as const,
+    ALLOWED_EXTENSIONS: [".patt"] as const,
   },
-} as const;
+};
 
 export interface ValidationResult {
   valid: boolean;
@@ -59,6 +59,13 @@ export function formatFileSize(bytes: number): string {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
+// Calculate aspect ratio
+function calculateAspectRatio(width: number, height: number): string {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(width, height);
+  return `${width / divisor}:${height / divisor}`;
+}
+
 // Validate video file
 export async function validateVideo(file: File): Promise<ValidationResult> {
   const warnings: string[] = [];
@@ -70,29 +77,25 @@ export async function validateVideo(file: File): Promise<ValidationResult> {
 
   // 2. File extension check
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
-  if (!FILE_LIMITS.VIDEO.ALLOWED_EXTENSIONS.includes(extension)) {
+  const allowedExtensions: readonly string[] = FILE_LIMITS.VIDEO.ALLOWED_EXTENSIONS;
+  if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: `Format video tidak didukung. Gunakan: ${FILE_LIMITS.VIDEO.ALLOWED_EXTENSIONS.join(
-        ", "
-      )}`,
+      error: `Format video tidak didukung. Gunakan: ${FILE_LIMITS.VIDEO.ALLOWED_EXTENSIONS.join(", ")}`,
     };
   }
 
   // 3. MIME type check
-  if (!FILE_LIMITS.VIDEO.ALLOWED_TYPES.includes(file.type)) {
-    warnings.push(
-      `MIME type tidak standar (${file.type}), tapi akan tetap dicoba`
-    );
+  const allowedTypes: readonly string[] = FILE_LIMITS.VIDEO.ALLOWED_TYPES;
+  if (!allowedTypes.includes(file.type)) {
+    warnings.push(`MIME type tidak standar (${file.type}), tapi akan tetap dicoba`);
   }
 
   // 4. Size check
   if (file.size > FILE_LIMITS.VIDEO.MAX_SIZE) {
     return {
       valid: false,
-      error: `Video terlalu besar (${formatFileSize(
-        file.size
-      )}). Maksimal ${formatFileSize(FILE_LIMITS.VIDEO.MAX_SIZE)}`,
+      error: `Video terlalu besar (${formatFileSize(file.size)}). Maksimal ${formatFileSize(FILE_LIMITS.VIDEO.MAX_SIZE)}`,
     };
   }
 
@@ -104,26 +107,19 @@ export async function validateVideo(file: File): Promise<ValidationResult> {
     if (metadata.duration > FILE_LIMITS.VIDEO.MAX_DURATION) {
       return {
         valid: false,
-        error: `Video terlalu panjang (${Math.round(
-          metadata.duration
-        )}s). Maksimal ${FILE_LIMITS.VIDEO.MAX_DURATION} detik`,
+        error: `Video terlalu panjang (${Math.round(metadata.duration)}s). Maksimal ${FILE_LIMITS.VIDEO.MAX_DURATION} detik`,
       };
     }
 
     if (metadata.duration < 1) {
-      warnings.push(
-        "Video terlalu pendek (< 1 detik). Pastikan ini yang Anda inginkan."
-      );
+      warnings.push("Video terlalu pendek (< 1 detik). Pastikan ini yang Anda inginkan.");
     }
 
     // Resolution checks
     const { width, height } = FILE_LIMITS.VIDEO.RECOMMENDED_RESOLUTION;
     const { MAX_RESOLUTION } = FILE_LIMITS.VIDEO;
 
-    if (
-      metadata.width > MAX_RESOLUTION.width ||
-      metadata.height > MAX_RESOLUTION.height
-    ) {
+    if (metadata.width > MAX_RESOLUTION.width || metadata.height > MAX_RESOLUTION.height) {
       warnings.push(
         `Resolusi sangat tinggi (${metadata.width}x${metadata.height}). Akan dikompres ke ${MAX_RESOLUTION.width}x${MAX_RESOLUTION.height} untuk performa optimal.`
       );
@@ -132,18 +128,12 @@ export async function validateVideo(file: File): Promise<ValidationResult> {
         `Resolusi tinggi (${metadata.width}x${metadata.height}). Rekomendasi: ${width}x${height} untuk performa AR terbaik.`
       );
     } else if (metadata.width < 640 || metadata.height < 480) {
-      warnings.push(
-        `Resolusi rendah (${metadata.width}x${metadata.height}). Hasil AR mungkin kurang tajam.`
-      );
+      warnings.push(`Resolusi rendah (${metadata.width}x${metadata.height}). Hasil AR mungkin kurang tajam.`);
     }
 
     // Quality assessment
     let quality: "excellent" | "good" | "fair" | "poor" = "good";
-    if (
-      metadata.width >= 1920 &&
-      metadata.height >= 1080 &&
-      metadata.duration <= 60
-    ) {
+    if (metadata.width >= 1920 && metadata.height >= 1080 && metadata.duration <= 60) {
       quality = "excellent";
     } else if (metadata.width >= 1280 && metadata.height >= 720) {
       quality = "good";
@@ -168,18 +158,13 @@ export async function validateVideo(file: File): Promise<ValidationResult> {
   } catch (error) {
     return {
       valid: false,
-      error: `Gagal membaca video: ${
-        error instanceof Error ? error.message : "Format tidak valid"
-      }`,
+      error: `Gagal membaca video: ${error instanceof Error ? error.message : "Format tidak valid"}`,
     };
   }
 }
 
 // Validate image file
-export async function validateImage(
-  file: File,
-  type: "content" | "marker"
-): Promise<ValidationResult> {
+export async function validateImage(file: File, type: "content" | "marker"): Promise<ValidationResult> {
   const limits = type === "marker" ? FILE_LIMITS.MARKER : FILE_LIMITS.IMAGE;
   const warnings: string[] = [];
 
@@ -190,29 +175,25 @@ export async function validateImage(
 
   // 2. Extension check
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
-  if (!limits.ALLOWED_EXTENSIONS.includes(extension)) {
+  const allowedExtensions: readonly string[] = limits.ALLOWED_EXTENSIONS;
+  if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: `Format gambar tidak didukung. Gunakan: ${limits.ALLOWED_EXTENSIONS.join(
-        ", "
-      )}`,
+      error: `Format gambar tidak didukung. Gunakan: ${limits.ALLOWED_EXTENSIONS.join(", ")}`,
     };
   }
 
   // 3. MIME type check
-  if (!limits.ALLOWED_TYPES.includes(file.type)) {
-    warnings.push(
-      `MIME type tidak standar (${file.type}), tapi akan tetap dicoba`
-    );
+  const allowedTypes: readonly string[] = limits.ALLOWED_TYPES;
+  if (!allowedTypes.includes(file.type)) {
+    warnings.push(`MIME type tidak standar (${file.type}), tapi akan tetap dicoba`);
   }
 
   // 4. Size check
   if (file.size > limits.MAX_SIZE) {
     return {
       valid: false,
-      error: `Gambar terlalu besar (${formatFileSize(
-        file.size
-      )}). Maksimal ${formatFileSize(limits.MAX_SIZE)}`,
+      error: `Gambar terlalu besar (${formatFileSize(file.size)}). Maksimal ${formatFileSize(limits.MAX_SIZE)}`,
     };
   }
 
@@ -222,10 +203,7 @@ export async function validateImage(
 
     // Resolution checks
     if ("MIN_RESOLUTION" in limits) {
-      if (
-        metadata.width < limits.MIN_RESOLUTION.width ||
-        metadata.height < limits.MIN_RESOLUTION.height
-      ) {
+      if (metadata.width < limits.MIN_RESOLUTION.width || metadata.height < limits.MIN_RESOLUTION.height) {
         return {
           valid: false,
           error: `Resolusi terlalu kecil (${metadata.width}x${metadata.height}). Minimal ${limits.MIN_RESOLUTION.width}x${limits.MIN_RESOLUTION.height}px`,
@@ -234,13 +212,8 @@ export async function validateImage(
     }
 
     if ("MAX_RESOLUTION" in limits) {
-      if (
-        metadata.width > limits.MAX_RESOLUTION.width ||
-        metadata.height > limits.MAX_RESOLUTION.height
-      ) {
-        warnings.push(
-          `Resolusi sangat tinggi (${metadata.width}x${metadata.height}). Akan dikompres otomatis.`
-        );
+      if (metadata.width > limits.MAX_RESOLUTION.width || metadata.height > limits.MAX_RESOLUTION.height) {
+        warnings.push(`Resolusi sangat tinggi (${metadata.width}x${metadata.height}). Akan dikompres otomatis.`);
       }
     }
 
@@ -256,9 +229,7 @@ export async function validateImage(
 
       // Check if image is too small for reliable tracking
       if (metadata.width < 512 || metadata.height < 512) {
-        warnings.push(
-          "Resolusi marker cukup rendah. Deteksi mungkin kurang akurat. Rekomendasi: minimal 1024x1024px."
-        );
+        warnings.push("Resolusi marker cukup rendah. Deteksi mungkin kurang akurat. Rekomendasi: minimal 1024x1024px.");
       }
 
       // Check image complexity (contrast)
@@ -272,13 +243,9 @@ export async function validateImage(
       // Check if image has too much detail
       const complexity = await checkImageComplexity(file);
       if (complexity === "too-simple") {
-        warnings.push(
-          "Marker terlalu sederhana. Tambahkan detail atau pola unik untuk tracking yang lebih baik."
-        );
+        warnings.push("Marker terlalu sederhana. Tambahkan detail atau pola unik untuk tracking yang lebih baik.");
       } else if (complexity === "too-complex") {
-        warnings.push(
-          "Marker sangat kompleks. Pertimbangkan menyederhanakan desain untuk tracking yang lebih stabil."
-        );
+        warnings.push("Marker sangat kompleks. Pertimbangkan menyederhanakan desain untuk tracking yang lebih stabil.");
       }
     }
 
@@ -318,9 +285,7 @@ export async function validateImage(
   } catch (error) {
     return {
       valid: false,
-      error: `Gagal membaca gambar: ${
-        error instanceof Error ? error.message : "Format tidak valid"
-      }`,
+      error: `Gagal membaca gambar: ${error instanceof Error ? error.message : "Format tidak valid"}`,
     };
   }
 }
@@ -344,16 +309,12 @@ export function validatePattern(file: File): ValidationResult {
   if (file.size > FILE_LIMITS.PATTERN.MAX_SIZE) {
     return {
       valid: false,
-      error: `File pattern terlalu besar (${formatFileSize(
-        file.size
-      )}). Maksimal ${formatFileSize(FILE_LIMITS.PATTERN.MAX_SIZE)}`,
+      error: `File pattern terlalu besar (${formatFileSize(file.size)}). Maksimal ${formatFileSize(FILE_LIMITS.PATTERN.MAX_SIZE)}`,
     };
   }
 
   if (file.size < 1000) {
-    warnings.push(
-      "File pattern sangat kecil. Pastikan file valid dan lengkap."
-    );
+    warnings.push("File pattern sangat kecil. Pastikan file valid dan lengkap.");
   }
 
   return {
@@ -399,9 +360,7 @@ async function getVideoMetadata(file: File): Promise<{
     video.onerror = () => {
       clearTimeout(timeout);
       URL.revokeObjectURL(video.src);
-      reject(
-        new Error("File video corrupt atau format tidak didukung browser")
-      );
+      reject(new Error("File video corrupt atau format tidak didukung browser"));
     };
 
     try {
@@ -444,9 +403,7 @@ async function getImageMetadata(file: File): Promise<{
     img.onerror = () => {
       clearTimeout(timeout);
       URL.revokeObjectURL(img.src);
-      reject(
-        new Error("File gambar corrupt atau format tidak didukung browser")
-      );
+      reject(new Error("File gambar corrupt atau format tidak didukung browser"));
     };
 
     try {
@@ -495,9 +452,7 @@ async function checkImageContrast(file: File): Promise<boolean> {
 }
 
 // Helper: Check image complexity
-async function checkImageComplexity(
-  file: File
-): Promise<"good" | "too-simple" | "too-complex"> {
+async function checkImageComplexity(file: File): Promise<"good" | "too-simple" | "too-complex"> {
   try {
     const img = await createImageBitmap(file, {
       resizeWidth: 50,
@@ -516,28 +471,25 @@ async function checkImageComplexity(
     const imageData = ctx.getImageData(0, 0, 50, 50);
     const data = imageData.data;
 
-    // Count unique colors (simplified edge detection)
-    let uniqueColors = new Set<string>();
+    // Count unique colors (simplified)
+    const colors = new Set<string>();
     for (let i = 0; i < data.length; i += 4) {
-      const color = `${Math.floor(data[i] / 32)},${Math.floor(
-        data[i + 1] / 32
-      )},${Math.floor(data[i + 2] / 32)}`;
-      uniqueColors.add(color);
+      const r = Math.floor(data[i] / 32);
+      const g = Math.floor(data[i + 1] / 32);
+      const b = Math.floor(data[i + 2] / 32);
+      colors.add(`${r}-${g}-${b}`);
     }
 
-    const uniqueCount = uniqueColors.size;
+    const uniqueColors = colors.size;
 
-    if (uniqueCount < 10) return "too-simple";
-    if (uniqueCount > 200) return "too-complex";
+    if (uniqueColors < 10) {
+      return "too-simple";
+    } else if (uniqueColors > 200) {
+      return "too-complex";
+    }
+
     return "good";
   } catch {
     return "good";
   }
-}
-
-// Helper: Calculate aspect ratio
-function calculateAspectRatio(width: number, height: number): string {
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const divisor = gcd(width, height);
-  return `${width / divisor}:${height / divisor}`;
 }
