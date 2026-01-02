@@ -39,7 +39,7 @@ END $$;
 UPDATE profiles 
 SET 
   subscription_tier = 'demo'::subscription_tier,
-  upload_quota = 999999,
+  upload_quota = 5,
   is_trial_active = TRUE,
   trial_ends_at = COALESCE(trial_ends_at, NOW() + INTERVAL '14 days')
 WHERE subscription_tier::text = 'free';
@@ -61,7 +61,7 @@ WHERE subscription_tier = 'pro' AND upload_quota != 20;
 -- ========================================
 ALTER TABLE profiles 
 ALTER COLUMN subscription_tier SET DEFAULT 'demo'::subscription_tier,
-ALTER COLUMN upload_quota SET DEFAULT 999999,
+ALTER COLUMN upload_quota SET DEFAULT 5,
 ALTER COLUMN uploads_used SET DEFAULT 0,
 ALTER COLUMN is_trial_active SET DEFAULT TRUE;
 
@@ -112,7 +112,7 @@ BEGIN
     user_name,
     user_avatar,
     'demo'::subscription_tier,  -- ✅ Match TypeScript interface
-    999999,                       -- ✅ Demo quota
+    5,                       -- ✅ Demo quota
     0,
     TRUE,                         -- ✅ Trial active by default
     NOW() + INTERVAL '14 days'    -- ✅ 14 days trial
@@ -141,7 +141,7 @@ CHECK (uploads_used <= upload_quota);
 ALTER TABLE profiles 
 ADD CONSTRAINT check_valid_tier_quota 
 CHECK (
-  (subscription_tier = 'demo' AND upload_quota = 999999) OR
+  (subscription_tier = 'demo' AND upload_quota = 5) OR
   (subscription_tier = 'pro' AND upload_quota = 20) OR
   (subscription_tier = 'pro_plus' AND upload_quota = 30)
 );

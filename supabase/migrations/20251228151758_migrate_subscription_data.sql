@@ -15,7 +15,7 @@ WHERE subscription_tier::text = 'enterprise';
 -- Update quotas
 UPDATE profiles
 SET upload_quota = CASE
-  WHEN subscription_tier = 'demo' THEN 999999
+  WHEN subscription_tier = 'demo' THEN 5
   WHEN subscription_tier = 'pro' THEN 20
   WHEN subscription_tier = 'pro_plus' THEN 30
   ELSE upload_quota

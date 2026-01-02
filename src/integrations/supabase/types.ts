@@ -1,5 +1,5 @@
-// src/integrations/supabase/types.ts
-// ✅ UPDATED: Aligned with database schema and ar.types
+// src/integrations/supabase/types.ts - FIXED VERSION
+// ✅ Aligned dengan database schema
 
 export type Json =
   | string
@@ -11,7 +11,43 @@ export type Json =
 
 export type ARLibrary = "mindar" | "arjs";
 
+// ✅ FIXED: Match database enum
 export type SubscriptionTier = "demo" | "pro" | "pro_plus";
+
+// ========================================
+// Marker Data Type Definitions
+// ========================================
+
+export interface MindARMarkerData {
+  library: "mindar";
+  mindUrl: string;
+  targetIndex?: number;
+}
+
+export interface ARJSPatternMarkerData {
+  library: "arjs";
+  markerType: "pattern";
+  patternUrl: string;
+}
+
+export interface ARJSBarcodeMarkerData {
+  library: "arjs";
+  markerType: "barcode";
+  barcodeValue: number;
+}
+
+export interface ARJSPresetMarkerData {
+  library: "arjs";
+  markerType: "hiro" | "kanji";
+  preset: "hiro" | "kanji";
+}
+
+export type ARJSMarkerData =
+  | ARJSPatternMarkerData
+  | ARJSBarcodeMarkerData
+  | ARJSPresetMarkerData;
+
+export type MarkerData = MindARMarkerData | ARJSMarkerData;
 
 // ========================================
 // Database Tables
@@ -91,9 +127,9 @@ export interface Database {
           id: string;
           name: string;
           library: ARLibrary;
-          marker_url: string | null; // ✅ Nullable
-          mind_file_url: string | null; // ✅ Nullable
-          marker_data: Json; // ✅ JSONB type
+          marker_url: string | null;
+          mind_file_url: string | null;
+          marker_data: Json;
           content_url: string;
           content_type: string;
           scale: number;
@@ -266,72 +302,6 @@ export interface Database {
 }
 
 // ========================================
-// Marker Data Type Definitions
-// ========================================
-
-// MindAR marker data structure
-export interface MindARMarkerData {
-  library: "mindar";
-  mindUrl: string;
-  targetIndex?: number;
-}
-
-// AR.js marker data structures
-export interface ARJSPatternMarkerData {
-  library: "arjs";
-  markerType: "pattern";
-  patternUrl: string;
-}
-
-export interface ARJSBarcodeMarkerData {
-  library: "arjs";
-  markerType: "barcode";
-  barcodeValue: number; // 0-63
-}
-
-export interface ARJSPresetMarkerData {
-  library: "arjs";
-  markerType: "hiro" | "kanji";
-  preset: "hiro" | "kanji";
-}
-
-export type ARJSMarkerData =
-  | ARJSPatternMarkerData
-  | ARJSBarcodeMarkerData
-  | ARJSPresetMarkerData;
-
-export type MarkerData = MindARMarkerData | ARJSMarkerData;
-
-// ========================================
-// Helper Types for Frontend
-// ========================================
-
-export interface ARContentDB {
-  id: string;
-  name: string;
-  library: ARLibrary;
-  marker_url: string | null;
-  mind_file_url: string | null;
-  marker_data: MarkerData;
-  content_url: string;
-  content_type: string;
-  scale: number;
-  project_id: string | null;
-  user_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ARProjectDB {
-  id: string;
-  name: string;
-  library: ARLibrary;
-  user_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// ========================================
 // Type Guards
 // ========================================
 
@@ -365,8 +335,7 @@ export const isBarcodeMarker = (data: any): data is ARJSBarcodeMarkerData => {
 export const isPresetMarker = (data: any): data is ARJSPresetMarkerData => {
   return (
     isARJSMarkerData(data) &&
-    data.markerType !== "pattern" &&
-    data.markerType !== "barcode" &&
+    ["hiro", "kanji"].includes(data.markerType) &&
     typeof data.preset === "string"
   );
 };

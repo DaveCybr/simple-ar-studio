@@ -1,5 +1,5 @@
 // supabase/functions/stripe-webhook/index.ts
-// ✅ FIXED VERSION - Compatible with database schema
+// ✅ FIXED VERSION - Type-safe dengan proper error handling
 
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,6 +11,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, stripe-signature",
 };
 
+// ✅ Type-safe subscription tier mapping
+type SubscriptionTier = "demo" | "pro" | "pro_plus";
+
+interface TierConfig {
+  tier: SubscriptionTier;
+  quota: number;
+}
+
+// ✅ Map Stripe product/plan names to our database tiers
+const TIER_MAPPING: Record<string, TierConfig> = {
+  // Stripe metadata plan values
+  demo: { tier: "demo", quota: 5 },
+  free: { tier: "demo", quota: 5 },
+  pro: { tier: "pro", quota: 20 },
+  pro_plus: { tier: "pro_plus", quota: 30 },
+  enterprise: { tier: "pro_plus", quota: 30 },
+
+  // Fallback for old names
+  starter: { tier: "demo", quota: 5 },
+  basic: { tier: "pro", quota: 20 },
+  premium: { tier: "pro_plus", quota: 30 },
+};
+
+function mapPlanToTier(planName: string): TierConfig {
+  const normalized = planName.toLowerCase().trim();
+  return TIER_MAPPING[normalized] || { tier: "demo", quota: 5 };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -18,107 +46,96 @@ serve(async (req) => {
 
   console.log("📨 Webhook request received");
 
-  // Validate Stripe API Key
-  const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
-  if (!stripeApiKey) {
-    console.error("❌ STRIPE_API_KEY not configured");
-    return new Response(JSON.stringify({ error: "Stripe not configured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const stripe = new Stripe(stripeApiKey, {
-    apiVersion: "2023-10-16",
-    httpClient: Stripe.createFetchHttpClient(),
-  });
-
-  const cryptoProvider = Stripe.createSubtleCryptoProvider();
-
-  // Validate signature
-  const signature = req.headers.get("stripe-signature");
-  if (!signature) {
-    console.error("❌ No Stripe signature found");
-    return new Response(JSON.stringify({ error: "Missing signature" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const body = await req.text();
-  let event: Stripe.Event;
-
   try {
-    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SIGNING_SECRET");
-    if (!webhookSecret) {
-      throw new Error("STRIPE_WEBHOOK_SIGNING_SECRET not configured");
+    // ========================================
+    // 1. Initialize Stripe
+    // ========================================
+    const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
+    if (!stripeApiKey) {
+      console.error("❌ STRIPE_API_KEY not configured");
+      return new Response(JSON.stringify({ error: "Stripe not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    event = await stripe.webhooks.constructEventAsync(
-      body,
-      signature,
-      webhookSecret,
-      undefined,
-      cryptoProvider
-    );
-
-    console.log("✅ Webhook verified:", event.type);
-  } catch (err: any) {
-    console.error("❌ Signature verification failed:", err.message);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const stripe = new Stripe(stripeApiKey, {
+      apiVersion: "2023-10-16",
+      httpClient: Stripe.createFetchHttpClient(),
     });
-  }
 
-  // Initialize Supabase with service role for admin operations
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    // ========================================
+    // 2. Verify Webhook Signature
+    // ========================================
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) {
+      console.error("❌ No Stripe signature found");
+      return new Response(JSON.stringify({ error: "Missing signature" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("❌ Supabase credentials not configured");
-    return new Response(JSON.stringify({ error: "Database not configured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SIGNING_SECRET");
+    if (!webhookSecret) {
+      console.error("❌ STRIPE_WEBHOOK_SIGNING_SECRET not configured");
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const body = await req.text();
+    let event: Stripe.Event;
+
+    try {
+      const cryptoProvider = Stripe.createSubtleCryptoProvider();
+      event = await stripe.webhooks.constructEventAsync(
+        body,
+        signature,
+        webhookSecret,
+        undefined,
+        cryptoProvider
+      );
+      console.log("✅ Webhook verified:", event.type);
+    } catch (err: any) {
+      console.error("❌ Signature verification failed:", err.message);
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========================================
+    // 3. Initialize Supabase Admin Client
+    // ========================================
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("❌ Supabase credentials not configured");
+      return new Response(
+        JSON.stringify({ error: "Database not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
     });
-  }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  // ✅ HELPER: Map plan names to valid database enum values
-  // Database enum: 'free' | 'pro' | 'enterprise'
-  type SubscriptionTier = "free" | "pro" | "enterprise";
-
-  const mapPlanToTier = (plan: string): SubscriptionTier => {
-    const planMap: Record<string, SubscriptionTier> = {
-      free: "free",
-      pro: "pro",
-      pro_plus: "enterprise",
-      enterprise: "enterprise",
-      // Fallback mappings
-      starter: "free",
-      basic: "pro",
-      premium: "enterprise",
-    };
-    return planMap[plan.toLowerCase()] || "free";
-  };
-
-  // ✅ HELPER: Get quota for subscription tier
-  const getQuotaForTier = (tier: SubscriptionTier): number => {
-    const quotas: Record<SubscriptionTier, number> = {
-      free: 3,
-      pro: 20,
-      enterprise: 100,
-    };
-    return quotas[tier];
-  };
-
-  try {
+    // ========================================
+    // 4. Handle Webhook Events
+    // ========================================
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -132,15 +149,15 @@ serve(async (req) => {
           break;
         }
 
-        const tier = mapPlanToTier(planFromMetadata);
-        const quota = getQuotaForTier(tier);
+        const config = mapPlanToTier(planFromMetadata);
 
         const { error } = await supabase
           .from("profiles")
           .update({
-            subscription_tier: tier,
-            upload_quota: quota,
+            subscription_tier: config.tier,
+            upload_quota: config.quota,
             stripe_customer_id: session.customer as string,
+            is_trial_active: false, // ✅ Disable trial when upgrading
             updated_at: new Date().toISOString(),
           })
           .eq("id", userId);
@@ -149,7 +166,10 @@ serve(async (req) => {
           console.error("❌ Database update error:", error);
           throw error;
         }
-        console.log(`✅ User ${userId} upgraded to ${tier} with quota ${quota}`);
+
+        console.log(
+          `✅ User ${userId} upgraded to ${config.tier} with quota ${config.quota}`
+        );
         break;
       }
 
@@ -166,7 +186,7 @@ serve(async (req) => {
         // Find user by stripe_customer_id
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("id")
+          .select("id, subscription_tier")
           .eq("stripe_customer_id", customerId)
           .maybeSingle();
 
@@ -180,18 +200,17 @@ serve(async (req) => {
           break;
         }
 
-        // Get plan from subscription metadata
         const planFromMetadata = subscription.metadata?.plan || "pro";
-        const tier = mapPlanToTier(planFromMetadata);
-        const quota = getQuotaForTier(tier);
+        const config = mapPlanToTier(planFromMetadata);
 
         // Only update if subscription is active
         if (subscription.status === "active") {
           const { error } = await supabase
             .from("profiles")
             .update({
-              subscription_tier: tier,
-              upload_quota: quota,
+              subscription_tier: config.tier,
+              upload_quota: config.quota,
+              is_trial_active: false,
               updated_at: new Date().toISOString(),
             })
             .eq("id", profile.id);
@@ -200,9 +219,30 @@ serve(async (req) => {
             console.error("❌ Database update error:", error);
             throw error;
           }
-          console.log(`✅ Subscription active: user ${profile.id} → ${tier}`);
-        } else {
-          console.log(`ℹ️ Subscription status: ${subscription.status}`);
+
+          console.log(
+            `✅ Subscription active: user ${profile.id} → ${config.tier}`
+          );
+        } else if (subscription.status === "past_due") {
+          // Don't downgrade immediately on past_due, wait for payment_failed
+          console.log(`⚠️ Subscription past_due for user ${profile.id}`);
+        } else if (subscription.status === "canceled") {
+          // Downgrade to demo
+          const { error } = await supabase
+            .from("profiles")
+            .update({
+              subscription_tier: "demo",
+              upload_quota: 5,
+              is_trial_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", profile.id);
+
+          if (error) {
+            console.error("❌ Downgrade error:", error);
+          } else {
+            console.log(`✅ User ${profile.id} downgraded to demo (canceled)`);
+          }
         }
         break;
       }
@@ -211,7 +251,7 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
-        console.log("❌ Subscription canceled:", customerId);
+        console.log("❌ Subscription deleted:", customerId);
 
         const { data: profile } = await supabase
           .from("profiles")
@@ -220,21 +260,21 @@ serve(async (req) => {
           .maybeSingle();
 
         if (profile) {
-          // Downgrade to free tier
           const { error } = await supabase
             .from("profiles")
             .update({
-              subscription_tier: "free",
-              upload_quota: 3,
+              subscription_tier: "demo",
+              upload_quota: 5,
+              is_trial_active: false,
               updated_at: new Date().toISOString(),
             })
             .eq("id", profile.id);
 
           if (error) {
             console.error("❌ Downgrade error:", error);
-            throw error;
+          } else {
+            console.log(`✅ User ${profile.id} downgraded to demo`);
           }
-          console.log(`✅ User ${profile.id} downgraded to free`);
         }
         break;
       }
@@ -242,6 +282,8 @@ serve(async (req) => {
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         console.log(`✅ Payment succeeded: ${invoice.id}`);
+
+        // Optional: Send success email or notification
         break;
       }
 
@@ -251,27 +293,32 @@ serve(async (req) => {
 
         console.log(`❌ Payment failed: ${invoice.id}`);
 
+        // Find profile
         const { data: profile } = await supabase
           .from("profiles")
-          .select("id")
+          .select("id, subscription_tier")
           .eq("stripe_customer_id", customerId)
           .maybeSingle();
 
-        if (profile) {
-          // Downgrade to free on payment failure
+        if (profile && profile.subscription_tier !== "demo") {
+          // Downgrade to demo after payment failure
           const { error } = await supabase
             .from("profiles")
             .update({
-              subscription_tier: "free",
-              upload_quota: 3,
+              subscription_tier: "demo",
+              upload_quota: 5,
+              is_trial_active: false,
               updated_at: new Date().toISOString(),
             })
             .eq("id", profile.id);
 
           if (error) {
             console.error("❌ Payment failure downgrade error:", error);
+          } else {
+            console.log(
+              `⚠️ User ${profile.id} downgraded to demo (payment failed)`
+            );
           }
-          console.log(`⚠️ User ${profile.id} downgraded due to payment failure`);
         }
         break;
       }
@@ -280,11 +327,15 @@ serve(async (req) => {
         console.log(`ℹ️ Unhandled event: ${event.type}`);
     }
 
+    // ========================================
+    // 5. Return Success Response
+    // ========================================
     return new Response(
       JSON.stringify({
         received: true,
         eventId: event.id,
         eventType: event.type,
+        timestamp: new Date().toISOString(),
       }),
       {
         status: 200,
@@ -297,6 +348,7 @@ serve(async (req) => {
       JSON.stringify({
         error: "Processing failed",
         message: error.message,
+        stack: error.stack,
       }),
       {
         status: 500,
