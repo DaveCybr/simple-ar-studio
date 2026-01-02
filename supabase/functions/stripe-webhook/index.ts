@@ -1,22 +1,15 @@
 // supabase/functions/stripe-webhook/index.ts
-// ✅ IMPROVED VERSION with better plan detection
+// ✅ FIXED VERSION - Compatible with database schema
 
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@14?target=denonext";
+import Stripe from "https://esm.sh/stripe@14.10.0?target=deno";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, stripe-signature",
 };
-
-const stripe = new Stripe(Deno.env.get("STRIPE_API_KEY") || "", {
-  apiVersion: "2023-10-16",
-  httpClient: Stripe.createFetchHttpClient(),
-});
-
-const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -25,6 +18,24 @@ serve(async (req) => {
 
   console.log("📨 Webhook request received");
 
+  // Validate Stripe API Key
+  const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
+  if (!stripeApiKey) {
+    console.error("❌ STRIPE_API_KEY not configured");
+    return new Response(JSON.stringify({ error: "Stripe not configured" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const stripe = new Stripe(stripeApiKey, {
+    apiVersion: "2023-10-16",
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+
+  const cryptoProvider = Stripe.createSubtleCryptoProvider();
+
+  // Validate signature
   const signature = req.headers.get("stripe-signature");
   if (!signature) {
     console.error("❌ No Stripe signature found");
@@ -60,36 +71,51 @@ serve(async (req) => {
     });
   }
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
+  // Initialize Supabase with service role for admin operations
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-  // ✅ HELPER FUNCTION: Detect plan from Price ID
-  const getPlanFromPriceId = (priceId: string): string => {
-    // Match dengan Price IDs di Pricing.tsx
-    const PRICE_ID_MAP: Record<string, string> = {
-      price_1SjLcR2LSlGk7TpHhY1p4qsC: "pro",
-      price_1SjLd62LSlGk7TpH1yaPXeVN: "pro_plus",
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error("❌ Supabase credentials not configured");
+    return new Response(JSON.stringify({ error: "Database not configured" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  // ✅ HELPER: Map plan names to valid database enum values
+  // Database enum: 'free' | 'pro' | 'enterprise'
+  type SubscriptionTier = "free" | "pro" | "enterprise";
+
+  const mapPlanToTier = (plan: string): SubscriptionTier => {
+    const planMap: Record<string, SubscriptionTier> = {
+      free: "free",
+      pro: "pro",
+      pro_plus: "enterprise",
+      enterprise: "enterprise",
+      // Fallback mappings
+      starter: "free",
+      basic: "pro",
+      premium: "enterprise",
     };
-
-    return PRICE_ID_MAP[priceId] || "demo";
+    return planMap[plan.toLowerCase()] || "free";
   };
 
-  // ✅ HELPER FUNCTION: Get quota for plan
-  const getQuotaForPlan = (plan: string): number => {
-    const quotas: Record<string, number> = {
-      demo: 999999,
+  // ✅ HELPER: Get quota for subscription tier
+  const getQuotaForTier = (tier: SubscriptionTier): number => {
+    const quotas: Record<SubscriptionTier, number> = {
+      free: 3,
       pro: 20,
-      pro_plus: 30,
+      enterprise: 100,
     };
-    return quotas[plan] || 3;
+    return quotas[tier];
   };
 
   try {
@@ -97,29 +123,33 @@ serve(async (req) => {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
-        const plan = session.metadata?.plan || "demo";
+        const planFromMetadata = session.metadata?.plan || "pro";
 
-        console.log("💳 Checkout completed:", { userId, plan });
+        console.log("💳 Checkout completed:", { userId, planFromMetadata });
 
         if (!userId) {
-          console.warn("⚠️ No user_id in metadata");
+          console.warn("⚠️ No user_id in session metadata");
           break;
         }
+
+        const tier = mapPlanToTier(planFromMetadata);
+        const quota = getQuotaForTier(tier);
 
         const { error } = await supabase
           .from("profiles")
           .update({
-            subscription_tier: plan,
-            upload_quota: getQuotaForPlan(plan),
+            subscription_tier: tier,
+            upload_quota: quota,
             stripe_customer_id: session.customer as string,
-            is_trial_active: false, // ✅ End trial
-            trial_ends_at: null, // ✅ Clear trial date
             updated_at: new Date().toISOString(),
           })
           .eq("id", userId);
 
-        if (error) throw error;
-        console.log(`✅ User ${userId} upgraded from trial to ${plan}`);
+        if (error) {
+          console.error("❌ Database update error:", error);
+          throw error;
+        }
+        console.log(`✅ User ${userId} upgraded to ${tier} with quota ${quota}`);
         break;
       }
 
@@ -133,46 +163,44 @@ serve(async (req) => {
           status: subscription.status,
         });
 
-        const { data: profile } = await supabase
+        // Find user by stripe_customer_id
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("id")
           .eq("stripe_customer_id", customerId)
-          .single();
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("❌ Profile lookup error:", profileError);
+          break;
+        }
 
         if (!profile) {
           console.warn("⚠️ No profile found for customer:", customerId);
           break;
         }
 
-        // ✅ IMPROVED: Try multiple ways to detect plan
-        let detectedPlan = "demo";
-
-        // 1. Try metadata first
-        if (subscription.metadata?.plan) {
-          detectedPlan = subscription.metadata.plan;
-          console.log("📋 Plan from metadata:", detectedPlan);
-        }
-        // 2. Try Price ID as fallback
-        else if (subscription.items.data.length > 0) {
-          const priceId = subscription.items.data[0].price.id;
-          detectedPlan = getPlanFromPriceId(priceId);
-          console.log("💰 Plan from Price ID:", priceId, "→", detectedPlan);
-        }
+        // Get plan from subscription metadata
+        const planFromMetadata = subscription.metadata?.plan || "pro";
+        const tier = mapPlanToTier(planFromMetadata);
+        const quota = getQuotaForTier(tier);
 
         // Only update if subscription is active
         if (subscription.status === "active") {
           const { error } = await supabase
             .from("profiles")
             .update({
-              subscription_tier: detectedPlan,
-              upload_quota: getQuotaForPlan(detectedPlan),
-              is_trial_active: false,
+              subscription_tier: tier,
+              upload_quota: quota,
               updated_at: new Date().toISOString(),
             })
             .eq("id", profile.id);
 
-          if (error) throw error;
-          console.log(`✅ Subscription updated for user ${profile.id}`);
+          if (error) {
+            console.error("❌ Database update error:", error);
+            throw error;
+          }
+          console.log(`✅ Subscription active: user ${profile.id} → ${tier}`);
         } else {
           console.log(`ℹ️ Subscription status: ${subscription.status}`);
         }
@@ -189,25 +217,24 @@ serve(async (req) => {
           .from("profiles")
           .select("id")
           .eq("stripe_customer_id", customerId)
-          .single();
+          .maybeSingle();
 
         if (profile) {
-          // Downgrade to trial/demo
+          // Downgrade to free tier
           const { error } = await supabase
             .from("profiles")
             .update({
-              subscription_tier: "demo",
-              upload_quota: 999999,
-              is_trial_active: true,
-              trial_ends_at: new Date(
-                Date.now() + 14 * 24 * 60 * 60 * 1000
-              ).toISOString(),
+              subscription_tier: "free",
+              upload_quota: 3,
               updated_at: new Date().toISOString(),
             })
             .eq("id", profile.id);
 
-          if (error) throw error;
-          console.log(`✅ User ${profile.id} downgraded to demo`);
+          if (error) {
+            console.error("❌ Downgrade error:", error);
+            throw error;
+          }
+          console.log(`✅ User ${profile.id} downgraded to free`);
         }
         break;
       }
@@ -215,7 +242,6 @@ serve(async (req) => {
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         console.log(`✅ Payment succeeded: ${invoice.id}`);
-        // Additional logic if needed
         break;
       }
 
@@ -229,20 +255,23 @@ serve(async (req) => {
           .from("profiles")
           .select("id")
           .eq("stripe_customer_id", customerId)
-          .single();
+          .maybeSingle();
 
         if (profile) {
-          // Optionally downgrade or mark as payment issue
-          await supabase
+          // Downgrade to free on payment failure
+          const { error } = await supabase
             .from("profiles")
             .update({
-              subscription_tier: "demo",
-              upload_quota: 999999,
+              subscription_tier: "free",
+              upload_quota: 3,
               updated_at: new Date().toISOString(),
             })
             .eq("id", profile.id);
 
-          console.log(`⚠️ User ${profile.id} marked as payment failed`);
+          if (error) {
+            console.error("❌ Payment failure downgrade error:", error);
+          }
+          console.log(`⚠️ User ${profile.id} downgraded due to payment failure`);
         }
         break;
       }

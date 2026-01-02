@@ -39,19 +39,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BillingSettings } from "@/components/BillingSetting";
 import { useToast } from "@/hooks/use-toast";
+import type { SubscriptionTier } from "@/types/ar";
 
-// ✅ FIXED: Interface dengan tipe yang benar
+// ✅ FIXED: Interface matching database schema
 interface Profile {
   id: string;
   email: string | null;
   full_name: string | null;
   avatar_url: string | null;
-  subscription_tier: "demo" | "pro" | "pro_plus"; // ✅ Fixed tipe
+  subscription_tier: SubscriptionTier;
   upload_quota: number;
   uploads_used: number;
   stripe_customer_id: string | null;
-  trial_ends_at?: string | null; // ✅ Added
-  is_trial_active?: boolean; // ✅ Added
+  created_at: string;
+  updated_at: string;
 }
 
 const Dashboard = () => {
@@ -83,7 +84,7 @@ const Dashboard = () => {
         if (error) throw error;
 
         if (data) {
-          setProfile(data);
+          setProfile(data as Profile);
         }
       } catch (error) {
         console.error("Error fetching profile:", error);
@@ -123,7 +124,7 @@ const Dashboard = () => {
             .eq("id", user.id)
             .single()
             .then(({ data }) => {
-              if (data) setProfile(data);
+              if (data) setProfile(data as Profile);
             });
         }
       }, 2000);
@@ -189,45 +190,30 @@ const Dashboard = () => {
     );
   }
 
-  // ✅ FIXED: Tier labels yang konsisten
-  const tierLabels: Record<"demo" | "pro" | "pro_plus", string> = {
-    demo: "Demo Trial",
+  // ✅ FIXED: Tier labels matching database enum
+  const tierLabels: Record<SubscriptionTier, string> = {
+    free: "Free",
     pro: "PRO",
-    pro_plus: "PRO+",
+    enterprise: "Enterprise",
   };
 
-  // ✅ FIXED: Marker limits yang benar
-  const tierMarkerLimits: Record<"demo" | "pro" | "pro_plus", number> = {
-    demo: 5,
+  // ✅ FIXED: Marker limits
+  const tierMarkerLimits: Record<SubscriptionTier, number> = {
+    free: 3,
     pro: 5,
-    pro_plus: 5,
+    enterprise: 10,
   };
 
   // ✅ Calculate if user can upload
   const canUpload = profile
-    ? profile.uploads_used < profile.upload_quota ||
-      profile.subscription_tier === "demo" // Demo unlimited during trial
+    ? profile.uploads_used < profile.upload_quota
     : false;
 
   const uploadProgress = profile
     ? Math.min((profile.uploads_used / profile.upload_quota) * 100, 100)
     : 0;
 
-  const maxMarkers = profile ? tierMarkerLimits[profile.subscription_tier] : 5;
-
-  // ✅ Calculate trial days remaining
-  const getTrialDaysRemaining = () => {
-    if (!profile?.trial_ends_at) return 0;
-    const now = new Date();
-    const trialEnd = new Date(profile.trial_ends_at);
-    const diffTime = trialEnd.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return Math.max(0, diffDays);
-  };
-
-  const trialDaysRemaining = getTrialDaysRemaining();
-  const isTrialExpired =
-    profile?.subscription_tier === "demo" && trialDaysRemaining <= 0;
+  const maxMarkers = profile ? tierMarkerLimits[profile.subscription_tier] : 3;
 
   return (
     <div className="min-h-screen bg-background">
@@ -242,20 +228,18 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* ✅ FIXED: Badge dengan kondisi yang benar */}
+            {/* ✅ FIXED: Badge with correct conditions */}
             <Badge
-              variant={
-                profile?.subscription_tier === "demo" ? "secondary" : "default"
-              }
+              variant={profile?.subscription_tier === "free" ? "secondary" : "default"}
               className={
-                profile?.subscription_tier === "pro_plus"
+                profile?.subscription_tier === "enterprise"
                   ? "bg-purple-600"
                   : profile?.subscription_tier === "pro"
                   ? "bg-blue-600"
                   : ""
               }
             >
-              {profile?.subscription_tier === "pro_plus" && (
+              {profile?.subscription_tier === "enterprise" && (
                 <Sparkles className="w-3 h-3 mr-1" />
               )}
               {profile?.subscription_tier === "pro" && (
@@ -326,23 +310,17 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
-        {/* ✅ Trial Warning Banner */}
-        {profile?.subscription_tier === "demo" && (
+        {/* Free tier upgrade banner */}
+        {profile?.subscription_tier === "free" && (
           <Card className="mb-6 border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-yellow-800 dark:text-yellow-200">
-                    {isTrialExpired
-                      ? "Trial Expired"
-                      : `${trialDaysRemaining} Days Left in Trial`}
+                    Upgrade to PRO
                   </p>
                   <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    {isTrialExpired
-                      ? "Upgrade now to continue using premium features"
-                      : `Your trial ends on ${new Date(
-                          profile.trial_ends_at!
-                        ).toLocaleDateString()}`}
+                    Get more projects and advanced features
                   </p>
                 </div>
                 <Button onClick={() => navigate("/pricing")} size="sm">
@@ -360,34 +338,28 @@ const Dashboard = () => {
               <div>
                 <CardTitle className="text-lg">Kuota Project</CardTitle>
                 <CardDescription>
-                  {profile?.subscription_tier === "demo"
-                    ? `Unlimited during trial (${trialDaysRemaining} days left)`
-                    : `${profile?.uploads_used || 0} dari ${
-                        profile?.upload_quota || 3
-                      } project digunakan`}
+                  {profile?.uploads_used || 0} dari {profile?.upload_quota || 3} project digunakan
                   <span className="ml-2 text-xs">
                     (Maks {maxMarkers} marker per project)
                   </span>
                 </CardDescription>
               </div>
-              {profile?.subscription_tier !== "pro_plus" && (
+              {profile?.subscription_tier !== "enterprise" && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => navigate("/pricing")}
                 >
-                  {profile?.subscription_tier === "demo"
-                    ? "Upgrade"
-                    : "Upgrade to PRO+"}
+                  {profile?.subscription_tier === "free"
+                    ? "Upgrade to PRO"
+                    : "Upgrade to Enterprise"}
                 </Button>
               )}
             </div>
           </CardHeader>
-          {profile?.subscription_tier !== "demo" && (
-            <CardContent>
-              <Progress value={uploadProgress} className="h-2" />
-            </CardContent>
-          )}
+          <CardContent>
+            <Progress value={uploadProgress} className="h-2" />
+          </CardContent>
         </Card>
 
         {/* Tabs */}
@@ -400,7 +372,7 @@ const Dashboard = () => {
             <TabsTrigger
               value="upload"
               className="flex items-center gap-2"
-              disabled={!canUpload || isTrialExpired}
+              disabled={!canUpload}
             >
               <Upload className="w-4 h-4" />
               Buat Project
@@ -419,7 +391,7 @@ const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="upload" className="flex justify-center">
-            {canUpload && !isTrialExpired ? (
+            {canUpload ? (
               <ARProjectForm
                 onSuccess={handleUploadSuccess}
                 maxMarkers={maxMarkers}
@@ -430,13 +402,9 @@ const Dashboard = () => {
                   <div className="p-4 rounded-full bg-destructive/10 w-fit mx-auto mb-4">
                     <Upload className="w-8 h-8 text-destructive" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">
-                    {isTrialExpired ? "Trial Expired" : "Kuota Habis"}
-                  </h3>
+                  <h3 className="font-semibold text-lg mb-2">Kuota Habis</h3>
                   <p className="text-muted-foreground mb-4">
-                    {isTrialExpired
-                      ? "Your trial has ended. Upgrade to continue creating AR projects."
-                      : "Anda telah menggunakan semua kuota project bulan ini."}
+                    Anda telah menggunakan semua kuota project.
                   </p>
                   <Button onClick={() => navigate("/pricing")}>
                     Upgrade Sekarang
@@ -446,7 +414,7 @@ const Dashboard = () => {
             )}
           </TabsContent>
 
-          {/* ✅ BILLING TAB - FIXED with correct props */}
+          {/* Billing Tab */}
           <TabsContent value="billing" className="flex justify-center">
             <div className="w-full max-w-2xl">
               {profile ? (
@@ -455,8 +423,6 @@ const Dashboard = () => {
                   uploadQuota={profile.upload_quota}
                   uploadsUsed={profile.uploads_used}
                   stripeCustomerId={profile.stripe_customer_id}
-                  trialEndsAt={profile.trial_ends_at}
-                  isTrialActive={profile.is_trial_active}
                 />
               ) : (
                 <Card>
