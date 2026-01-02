@@ -1,4 +1,4 @@
-// src/pages/Dashboard.tsx - FIXED VERSION
+// src/pages/Dashboard.tsx - FIXED VERSION with Correct Billing Tiers
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,6 +51,8 @@ interface Profile {
   upload_quota: number;
   uploads_used: number;
   stripe_customer_id: string | null;
+  trial_ends_at: string | null;
+  is_trial_active: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +67,17 @@ const Dashboard = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // ✅ Calculate trial days remaining
+  const daysRemaining = profile?.trial_ends_at
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(profile.trial_ends_at).getTime() - new Date().getTime()) /
+            (1000 * 60 * 60 * 24)
+        )
+      )
+    : 0;
 
   // ✅ Fetch profile on mount
   useEffect(() => {
@@ -190,18 +203,18 @@ const Dashboard = () => {
     );
   }
 
-  // ✅ FIXED: Tier labels matching database enum
+  // ✅ FIXED: Tier labels sesuai database enum (demo | pro | pro_plus)
   const tierLabels: Record<SubscriptionTier, string> = {
-    free: "Free",
+    demo: "Demo",
     pro: "PRO",
-    enterprise: "Enterprise",
+    pro_plus: "PRO+",
   };
 
-  // ✅ FIXED: Marker limits
+  // ✅ FIXED: Marker limits sesuai plan billing
   const tierMarkerLimits: Record<SubscriptionTier, number> = {
-    free: 3,
+    demo: 3, // Unlimited selama trial
     pro: 5,
-    enterprise: 10,
+    pro_plus: 10,
   };
 
   // ✅ Calculate if user can upload
@@ -228,18 +241,20 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* ✅ FIXED: Badge with correct conditions */}
+            {/* ✅ FIXED: Badge sesuai dengan plan billing */}
             <Badge
-              variant={profile?.subscription_tier === "free" ? "secondary" : "default"}
+              variant={
+                profile?.subscription_tier === "demo" ? "secondary" : "default"
+              }
               className={
-                profile?.subscription_tier === "enterprise"
-                  ? "bg-purple-600"
+                profile?.subscription_tier === "pro_plus"
+                  ? "bg-purple-600 text-white hover:bg-purple-700"
                   : profile?.subscription_tier === "pro"
-                  ? "bg-blue-600"
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
                   : ""
               }
             >
-              {profile?.subscription_tier === "enterprise" && (
+              {profile?.subscription_tier === "pro_plus" && (
                 <Sparkles className="w-3 h-3 mr-1" />
               )}
               {profile?.subscription_tier === "pro" && (
@@ -310,17 +325,20 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
-        {/* Free tier upgrade banner */}
-        {profile?.subscription_tier === "free" && (
+        {/* Demo tier upgrade banner */}
+        {profile?.subscription_tier === "demo" && (
           <Card className="mb-6 border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-yellow-800 dark:text-yellow-200">
-                    Upgrade to PRO
+                    🎁 Demo Plan Active
+                    {daysRemaining > 0
+                      ? ` - ${daysRemaining} days remaining`
+                      : " - Expired"}
                   </p>
                   <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    Get more projects and advanced features
+                    Upgrade to PRO to remove watermark and get 20 projects/month
                   </p>
                 </div>
                 <Button onClick={() => navigate("/pricing")} size="sm">
@@ -338,21 +356,22 @@ const Dashboard = () => {
               <div>
                 <CardTitle className="text-lg">Kuota Project</CardTitle>
                 <CardDescription>
-                  {profile?.uploads_used || 0} dari {profile?.upload_quota || 3} project digunakan
+                  {profile?.uploads_used || 0} dari {profile?.upload_quota || 3}{" "}
+                  project digunakan
                   <span className="ml-2 text-xs">
                     (Maks {maxMarkers} marker per project)
                   </span>
                 </CardDescription>
               </div>
-              {profile?.subscription_tier !== "enterprise" && (
+              {profile?.subscription_tier !== "pro_plus" && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => navigate("/pricing")}
                 >
-                  {profile?.subscription_tier === "free"
+                  {profile?.subscription_tier === "demo"
                     ? "Upgrade to PRO"
-                    : "Upgrade to Enterprise"}
+                    : "Upgrade to PRO+"}
                 </Button>
               )}
             </div>
@@ -423,6 +442,8 @@ const Dashboard = () => {
                   uploadQuota={profile.upload_quota}
                   uploadsUsed={profile.uploads_used}
                   stripeCustomerId={profile.stripe_customer_id}
+                  trialEndsAt={profile.trial_ends_at}
+                  isTrialActive={profile.is_trial_active}
                 />
               ) : (
                 <Card>
